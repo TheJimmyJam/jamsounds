@@ -1,8 +1,6 @@
 // POST /.netlify/functions/save-track
 // Downloads the Suno MP3 (and cover image), uploads to Supabase Storage, inserts a row in js_tracks.
-// This is critical because Suno deletes files after 15 days.
-
-const { createClient } = require('@supabase/supabase-js');
+// Uses Supabase REST/Storage APIs directly via fetch — no dependencies.
 
 const BUCKET = 'jamsounds-audio';
 const USER_EMAIL = 'wcannon83@gmail.com'; // single-user app for now
@@ -33,10 +31,8 @@ exports.handler = async (event) => {
     return json(400, { error: 'suno_audio_url and suno_audio_id required' });
   }
 
-  const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   try {
     // 1. Download audio from Suno
@@ -46,14 +42,22 @@ exports.handler = async (event) => {
 
     // 2. Upload to Supabase Storage
     const audioPath = `audio/${suno_audio_id}.mp3`;
-    const { error: upErr } = await supabase.storage.from(BUCKET).upload(audioPath, audioBuffer, {
-      contentType: 'audio/mpeg',
-      upsert: true,
+    const upRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${audioPath}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        apikey: SERVICE_KEY,
+        'Content-Type': 'audio/mpeg',
+        'x-upsert': 'true',
+      },
+      body: audioBuffer,
     });
-    if (upErr) throw new Error(`Audio upload failed: ${upErr.message}`);
+    if (!upRes.ok) {
+      const t = await upRes.text();
+      throw new Error(`Audio upload failed: ${upRes.status} ${t}`);
+    }
 
-    const { data: publicData } = supabase.storage.from(BUCKET).getPublicUrl(audioPath);
-    const storage_audio_url = publicData.publicUrl;
+    const storage_audio_url = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${audioPath}`;
 
     // 3. (Best-effort) upload cover image
     let storage_image_url = null;
@@ -63,25 +67,35 @@ exports.handler = async (event) => {
         if (imgRes.ok) {
           const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
           const imgPath = `images/${suno_audio_id}.jpg`;
-          const { error: imgErr } = await supabase.storage.from(BUCKET).upload(imgPath, imgBuffer, {
-            contentType: 'image/jpeg',
-            upsert: true,
+          const imgUp = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${imgPath}`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${SERVICE_KEY}`,
+              apikey: SERVICE_KEY,
+              'Content-Type': 'image/jpeg',
+              'x-upsert': 'true',
+            },
+            body: imgBuffer,
           });
-          if (!imgErr) {
-            const { data: imgPublic } = supabase.storage.from(BUCKET).getPublicUrl(imgPath);
-            storage_image_url = imgPublic.publicUrl;
+          if (imgUp.ok) {
+            storage_image_url = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${imgPath}`;
           }
         }
       } catch (e) {
-        // non-fatal
         console.warn('image upload skipped:', e.message);
       }
     }
 
-    // 4. Insert row
-    const { data: row, error: insErr } = await supabase
-      .from('js_tracks')
-      .insert({
+    // 4. Insert row via PostgREST
+    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/js_tracks`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        apikey: SERVICE_KEY,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({
         user_email: USER_EMAIL,
         project_brief: project_brief || null,
         music_brief: music_brief || null,
@@ -98,13 +112,16 @@ exports.handler = async (event) => {
         image_url: storage_image_url || image_url || null,
         tags,
         saved: true,
-      })
-      .select()
-      .single();
+      }),
+    });
 
-    if (insErr) throw new Error(`DB insert failed: ${insErr.message}`);
+    if (!insertRes.ok) {
+      const t = await insertRes.text();
+      throw new Error(`DB insert failed: ${insertRes.status} ${t}`);
+    }
 
-    return json(200, { track: row });
+    const rows = await insertRes.json();
+    return json(200, { track: Array.isArray(rows) ? rows[0] : rows });
   } catch (e) {
     return json(500, { error: e.message });
   }
