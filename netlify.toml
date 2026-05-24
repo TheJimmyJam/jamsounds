@@ -1,0 +1,16 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+  # Suno generation can take a couple minutes — extend function timeout.
+  # (Netlify Pro+ supports >10s; on free tier the default 10s is fine for our short polling calls)
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[dev]
+  publish = "public"
