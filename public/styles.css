@@ -451,6 +451,19 @@ audio {
 
 .library-item-delete:hover { color: var(--danger); }
 
+.library-item-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: var(--text-3);
+  padding: 2px 6px;
+  font-size: 14px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.library-item-download:hover { color: var(--text-1, #fff); background: var(--surface-2, #2a2a2a); }
+
 /* ===== Mobile ≤ 640px ===== */
 @media (max-width: 640px) {
   html, body { font-size: 15px; }

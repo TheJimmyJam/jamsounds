@@ -805,6 +805,11 @@ function renderLibrary() {
     const duetBadge = duet
       ? `<span class="duet-badge" title="Duet pair ${escapeAttr(duet.pair_id || '')}">DUET · ${escapeHtml((duet.role || '').toUpperCase())} · ${escapeHtml(duet.voice_name || '')}</span>`
       : '';
+    const dlUrl = t.storage_audio_url || t.suno_audio_url || '';
+    const dlName = `${(t.title || 'untitled').replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 60)}.mp3`;
+    const downloadBtn = dlUrl
+      ? `<a class="library-item-download" href="${escapeAttr(dlUrl)}" download="${escapeAttr(dlName)}" title="Download MP3">↓</a>`
+      : '';
     return `
     <div class="library-item" data-id="${t.id}">
       <div class="library-item-info">
@@ -812,6 +817,7 @@ function renderLibrary() {
         <p class="library-item-meta">${escapeHtml(t.style || '')} · ${formatDuration(t.duration)}</p>
       </div>
       <span class="library-item-date">${formatDate(t.created_at)}</span>
+      ${downloadBtn}
       <button class="library-item-delete" data-id="${t.id}" title="Delete">×</button>
     </div>
   `;
@@ -820,6 +826,7 @@ function renderLibrary() {
   els.libraryList.querySelectorAll('.library-item').forEach(item => {
     item.addEventListener('click', (e) => {
       if (e.target.classList.contains('library-item-delete')) return;
+      if (e.target.classList.contains('library-item-download')) return;
       const id = item.dataset.id;
       const t = savedTracks.find(x => x.id === id);
       if (!t) return;
