@@ -165,6 +165,34 @@
             <button id="save-persona-btn" class="icon-btn" title="Save vocal as persona">👤</button>
             <a id="download-link" class="icon-btn" title="Download" download>↓</a>
           </div>
+
+          <div id="persona-form" class="persona-form hidden">
+            <p class="section-label" style="margin: 12px 0 8px;">Save vocal as persona</p>
+            <div class="grid-2">
+              <div class="field">
+                <label for="persona-name">Name</label>
+                <input id="persona-name" type="text" maxlength="60" placeholder="Megi" />
+              </div>
+              <div class="field">
+                <label>Vocal window <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— pick a 10–30s span of clean singing</span></label>
+                <div style="display:flex;gap:6px;align-items:center;">
+                  <input id="persona-start" type="number" min="0" step="1" value="0" style="width:70px;" />
+                  <span class="hint">to</span>
+                  <input id="persona-end" type="number" min="10" step="1" value="30" style="width:70px;" />
+                  <span class="hint">sec</span>
+                </div>
+              </div>
+            </div>
+            <div class="field">
+              <label for="persona-description">Description <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— Suno requires this</span></label>
+              <textarea id="persona-description" rows="2" maxlength="500" placeholder="Intimate breathy female folk vocal, warm and slightly melancholic, slow tempo, soft delivery."></textarea>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button id="persona-form-save" class="btn-primary" style="flex:1;">Save persona</button>
+              <button id="persona-form-cancel" class="btn-secondary" style="margin:0;">Cancel</button>
+            </div>
+            <p id="persona-form-status" class="status-line"></p>
+          </div>
         </div>
       </div>
 

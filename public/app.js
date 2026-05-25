@@ -49,6 +49,14 @@ const els = {
   libraryCount: document.getElementById('library-count'),
   personasList: document.getElementById('personas-list'),
   personasCount: document.getElementById('personas-count'),
+  personaForm: document.getElementById('persona-form'),
+  personaName: document.getElementById('persona-name'),
+  personaDescription: document.getElementById('persona-description'),
+  personaStart: document.getElementById('persona-start'),
+  personaEnd: document.getElementById('persona-end'),
+  personaFormSave: document.getElementById('persona-form-save'),
+  personaFormCancel: document.getElementById('persona-form-cancel'),
+  personaFormStatus: document.getElementById('persona-form-status'),
 };
 
 let currentResults = null; // [{audio_url, image_url, title, duration, ...}, {...}]
@@ -70,7 +78,9 @@ async function init() {
   els.soundsLikeBtn.addEventListener('click', handleSoundsLike);
   els.generateBtn.addEventListener('click', handleGenerate);
   els.saveBtn.addEventListener('click', handleSave);
-  if (els.savePersonaBtn) els.savePersonaBtn.addEventListener('click', handleSavePersona);
+  if (els.savePersonaBtn) els.savePersonaBtn.addEventListener('click', openPersonaForm);
+  if (els.personaFormSave) els.personaFormSave.addEventListener('click', handleSavePersona);
+  if (els.personaFormCancel) els.personaFormCancel.addEventListener('click', closePersonaForm);
 
   // Reference MP3 upload — drag/drop + file picker
   els.dropZone.addEventListener('click', () => els.refFile.click());
@@ -674,25 +684,71 @@ function renderPersonas() {
   });
 }
 
-async function handleSavePersona() {
+function openPersonaForm() {
   if (!currentResults) return;
   const track = currentResults[activeVersion];
   if (!track || !track.id || !currentTaskId) {
     alert('No active track to make a persona from. Generate or open a saved track first.');
     return;
   }
+  // Pre-fill defaults using current track context.
+  if (els.personaForm) els.personaForm.classList.remove('hidden');
+  if (els.personaName && !els.personaName.value) els.personaName.value = '';
+  if (els.personaDescription && !els.personaDescription.value) {
+    els.personaDescription.value = els.style.value || '';
+  }
+  // Cap vocalEnd to the track duration if known (Suno requires ≤ duration).
+  if (els.personaEnd) {
+    const dur = Math.floor(track.duration || 0);
+    if (dur && dur >= 10) {
+      els.personaEnd.max = dur;
+      // If the field is at default 30 but the track is shorter, clamp it.
+      if (parseInt(els.personaEnd.value, 10) > dur) els.personaEnd.value = dur;
+    }
+  }
+  setStatus(els.personaFormStatus, '', '');
+  if (els.personaName) els.personaName.focus();
+}
 
-  const name = (prompt('Persona name (e.g. "Megi" or "Jimmy"):') || '').trim();
-  if (!name) return;
-  const description = (prompt(
-    'Describe this voice in 1–2 sentences (genre, vocal qualities, mood). Suno requires this.',
-    `${name} — ${els.style.value || 'custom vocal'}`
-  ) || '').trim();
-  if (!description) return;
+function closePersonaForm() {
+  if (els.personaForm) els.personaForm.classList.add('hidden');
+  setStatus(els.personaFormStatus, '', '');
+}
 
-  els.savePersonaBtn.disabled = true;
-  els.savePersonaBtn.textContent = '...';
-  setStatus(els.generateStatus, `Minting persona "${name}"...`, '');
+async function handleSavePersona() {
+  if (!currentResults) return;
+  const track = currentResults[activeVersion];
+  if (!track || !track.id || !currentTaskId) {
+    setStatus(els.personaFormStatus, 'No active track. Generate or open a saved track first.', 'error');
+    return;
+  }
+
+  const name = (els.personaName?.value || '').trim();
+  const description = (els.personaDescription?.value || '').trim();
+  const vocalStart = parseInt(els.personaStart?.value, 10);
+  const vocalEnd = parseInt(els.personaEnd?.value, 10);
+
+  if (!name) {
+    setStatus(els.personaFormStatus, 'Name required.', 'error');
+    return;
+  }
+  if (!description) {
+    setStatus(els.personaFormStatus, 'Description required — Suno needs it.', 'error');
+    return;
+  }
+  if (Number.isNaN(vocalStart) || Number.isNaN(vocalEnd)) {
+    setStatus(els.personaFormStatus, 'Vocal start/end must be numbers (seconds).', 'error');
+    return;
+  }
+  const span = vocalEnd - vocalStart;
+  if (span < 10 || span > 30) {
+    setStatus(els.personaFormStatus, `Window is ${span}s — must be between 10 and 30 seconds.`, 'error');
+    return;
+  }
+
+  els.personaFormSave.disabled = true;
+  els.personaFormCancel.disabled = true;
+  setStatus(els.personaFormStatus, `Minting persona "${name}"...`, '');
 
   try {
     const res = await fetch(`${API}/create-persona`, {
@@ -703,22 +759,30 @@ async function handleSavePersona() {
         audioId: track.id,
         name,
         description,
-        // Default Suno will use vocalStart=0, vocalEnd=30 (must be 10–30s segment).
+        vocalStart,
+        vocalEnd,
       }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Persona creation failed');
+
     await refreshPersonas();
     if (els.personaSelect && data.persona?.persona_id) {
       els.personaSelect.value = data.persona.persona_id;
     }
     setStatus(els.generateStatus, `Persona "${name}" saved. Selected for next generation.`, 'success');
     els.savePersonaBtn.textContent = '✓';
+    // Reset + close the form.
+    if (els.personaName) els.personaName.value = '';
+    if (els.personaDescription) els.personaDescription.value = '';
+    if (els.personaStart) els.personaStart.value = 0;
+    if (els.personaEnd) els.personaEnd.value = 30;
+    closePersonaForm();
   } catch (e) {
-    setStatus(els.generateStatus, `Persona error: ${e.message}`, 'error');
-    els.savePersonaBtn.textContent = '👤';
+    setStatus(els.personaFormStatus, `Suno error: ${e.message}. Try a different ${span}s window where the vocal is clearer.`, 'error');
   } finally {
-    els.savePersonaBtn.disabled = false;
+    els.personaFormSave.disabled = false;
+    els.personaFormCancel.disabled = false;
   }
 }
 
