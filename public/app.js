@@ -53,6 +53,8 @@ let activeVersion = 0;
 let pollingTimer = null;
 let savedTracks = [];
 let referenceUploadUrl = null; // public URL of uploaded MP3 reference (if any)
+let autosavedIds = new Set(); // suno_audio_ids already autosaved for the current generation
+let autosaveRunning = false;
 
 // ---------- Init ----------
 
@@ -241,6 +243,7 @@ async function handleGenerate() {
 
   els.generateBtn.disabled = true;
   setStatus(els.generateStatus, 'Submitting to Suno...', '');
+  autosavedIds = new Set();
 
   try {
     const res = await fetch(`${API}/generate-music`, {
@@ -298,9 +301,10 @@ function pollForResults() {
         currentResults = data.tracks;
         showResults();
         if (data.status === 'complete') {
-          setStatus(els.generateStatus, `Done. ${data.tracks.length} tracks ready.`, 'success');
+          setStatus(els.generateStatus, `Done. Saving ${data.tracks.length} tracks to library...`, '');
           els.generateBtn.disabled = false;
           refreshCredits();
+          await autosaveAll(data.tracks);
           return;
         } else {
           setStatus(els.generateStatus, 'Streaming ready. Final files baking...', '');
@@ -351,10 +355,8 @@ function switchVersion(idx) {
     btn.classList.toggle('active', i === idx);
   });
 
-  // Reset save button state
-  els.saveBtn.classList.remove('saved');
-  els.saveBtn.textContent = '♡';
-  els.saveBtn.disabled = false;
+  // Show ✓ if this version was already (auto)saved, otherwise ♡.
+  updateSaveButtonForActive();
 }
 
 function formatDuration(seconds) {
@@ -399,12 +401,93 @@ async function handleSave() {
 
     els.saveBtn.classList.add('saved');
     els.saveBtn.textContent = '✓';
+    if (track.id) autosavedIds.add(track.id);
     await refreshLibrary();
   } catch (e) {
     alert(`Save error: ${e.message}`);
     els.saveBtn.textContent = '♡';
   } finally {
     els.saveBtn.disabled = false;
+  }
+}
+
+// ---------- Autosave (both versions, on generation complete) ----------
+
+async function autosaveAll(tracks) {
+  if (autosaveRunning) return;
+  autosaveRunning = true;
+
+  const briefSnapshot = collectPayload();
+  const projectBrief = els.projectBrief.value.trim();
+  const styleVal = els.style.value.trim();
+  const promptVal = els.prompt.value.trim();
+  const instrumentalVal = els.instrumental.value === 'true';
+
+  const toSave = tracks.filter(t => t && t.id && !autosavedIds.has(t.id));
+  let okCount = 0;
+  const failures = [];
+
+  // Run in parallel — save-track is independent per track.
+  await Promise.all(toSave.map(async (track) => {
+    try {
+      const res = await fetch(`${API}/save-track`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          suno_audio_id: track.id,
+          suno_task_id: currentTaskId,
+          suno_audio_url: track.audio_url || track.stream_audio_url,
+          title: track.title,
+          style: styleVal,
+          prompt: promptVal,
+          model: track.model_name || els.model.value,
+          instrumental: instrumentalVal,
+          duration: track.duration,
+          image_url: track.image_url,
+          tags: track.tags,
+          project_brief: projectBrief,
+          music_brief: briefSnapshot,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      autosavedIds.add(track.id);
+      okCount++;
+    } catch (e) {
+      console.error('autosave failed for', track.id, e);
+      failures.push({ id: track.id, msg: e.message });
+    }
+  }));
+
+  await refreshLibrary();
+  updateSaveButtonForActive();
+
+  if (failures.length === 0) {
+    setStatus(els.generateStatus, `Done. ${okCount} tracks saved to library.`, 'success');
+  } else {
+    setStatus(
+      els.generateStatus,
+      `Saved ${okCount}/${tracks.length}. ${failures.length} failed — try the ♡ button to retry.`,
+      'error'
+    );
+  }
+
+  autosaveRunning = false;
+}
+
+function updateSaveButtonForActive() {
+  const track = currentResults && currentResults[activeVersion];
+  if (!track) return;
+  if (autosavedIds.has(track.id)) {
+    els.saveBtn.classList.add('saved');
+    els.saveBtn.textContent = '✓';
+    els.saveBtn.disabled = true;
+    els.saveBtn.title = 'Already in library';
+  } else {
+    els.saveBtn.classList.remove('saved');
+    els.saveBtn.textContent = '♡';
+    els.saveBtn.disabled = false;
+    els.saveBtn.title = 'Save to library';
   }
 }
 
