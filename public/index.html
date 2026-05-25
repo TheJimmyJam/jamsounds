@@ -106,6 +106,54 @@
         </div>
       </div>
 
+      <div class="field" style="background:var(--surface-2);border-radius:var(--radius-sm);padding:10px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input id="duet-mode" type="checkbox" style="margin:0;width:auto;" />
+          <label for="duet-mode" style="margin:0;cursor:pointer;">Duet mode <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— generate two parallel stems, one per voice (~16 credits total)</span></label>
+        </div>
+        <div id="duet-fields" class="hidden" style="margin-top:10px;">
+          <div class="grid-2">
+            <div class="field" style="margin-bottom:6px;">
+              <label for="duet-name-a">Voice A name</label>
+              <input id="duet-name-a" type="text" maxlength="40" value="Jimmy" placeholder="Jimmy" />
+            </div>
+            <div class="field" style="margin-bottom:6px;">
+              <label for="duet-name-b">Voice B name</label>
+              <input id="duet-name-b" type="text" maxlength="40" value="Megi" placeholder="Megi" />
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field" style="margin-bottom:6px;">
+              <label for="duet-persona-a">Voice A persona</label>
+              <select id="duet-persona-a"><option value="">None</option></select>
+            </div>
+            <div class="field" style="margin-bottom:6px;">
+              <label for="duet-persona-b">Voice B persona</label>
+              <select id="duet-persona-b"><option value="">None</option></select>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field" style="margin-bottom:0;">
+              <label for="duet-gender-a">Voice A gender</label>
+              <select id="duet-gender-a">
+                <option value="">n/a</option>
+                <option value="m" selected>Male</option>
+                <option value="f">Female</option>
+              </select>
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <label for="duet-gender-b">Voice B gender</label>
+              <select id="duet-gender-b">
+                <option value="">n/a</option>
+                <option value="m">Male</option>
+                <option value="f" selected>Female</option>
+              </select>
+            </div>
+          </div>
+          <p class="hint" style="margin-top:8px;font-weight:400;text-transform:none;letter-spacing:0;">Tag lines in your lyrics so we can split them: <code>[Verse 1: Jimmy]</code> for whole sections, <code>(Megi) line text</code> for individual lines. Untagged lines and "both/harmonized" sections go to both stems.</p>
+        </div>
+      </div>
+
       <details class="advanced">
         <summary>Advanced (weights, vocal gender, persona)</summary>
         <div class="grid-3">

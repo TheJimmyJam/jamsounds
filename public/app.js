@@ -32,6 +32,14 @@ const els = {
   weirdness: document.getElementById('weirdness'),
   audioWeight: document.getElementById('audio-weight'),
   personaSelect: document.getElementById('persona-select'),
+  duetMode: document.getElementById('duet-mode'),
+  duetFields: document.getElementById('duet-fields'),
+  duetNameA: document.getElementById('duet-name-a'),
+  duetNameB: document.getElementById('duet-name-b'),
+  duetPersonaA: document.getElementById('duet-persona-a'),
+  duetPersonaB: document.getElementById('duet-persona-b'),
+  duetGenderA: document.getElementById('duet-gender-a'),
+  duetGenderB: document.getElementById('duet-gender-b'),
   generateBtn: document.getElementById('generate-btn'),
   generateLabel: document.getElementById('generate-label'),
   generateStatus: document.getElementById('generate-status'),
@@ -96,6 +104,14 @@ async function init() {
   els.audioWeightSlider.addEventListener('input', () => {
     els.audioWeightOut.textContent = parseFloat(els.audioWeightSlider.value).toFixed(2);
   });
+
+  // Duet mode toggle — reveal/hide voice fields and update credit label.
+  if (els.duetMode) {
+    els.duetMode.addEventListener('change', () => {
+      els.duetFields.classList.toggle('hidden', !els.duetMode.checked);
+      updateGenerateLabel();
+    });
+  }
 
   document.querySelectorAll('.version-btn').forEach(btn => {
     btn.addEventListener('click', () => switchVersion(parseInt(btn.dataset.version, 10)));
@@ -241,16 +257,24 @@ function clearReference() {
 }
 
 function updateGenerateLabel() {
+  const duet = els.duetMode && els.duetMode.checked;
   if (referenceUploadUrl) {
-    els.generateLabel.textContent = 'Generate from MP3 reference · ~10 credits';
+    els.generateLabel.textContent = duet
+      ? 'Generate duet from MP3 reference · ~20 credits'
+      : 'Generate from MP3 reference · ~10 credits';
   } else {
-    els.generateLabel.textContent = 'Generate · ~8 credits';
+    els.generateLabel.textContent = duet
+      ? 'Generate duet · ~16 credits'
+      : 'Generate · ~8 credits';
   }
 }
 
 // ---------- Generate ----------
 
 async function handleGenerate() {
+  if (els.duetMode && els.duetMode.checked) {
+    return handleGenerateDuet();
+  }
   const payload = collectPayload();
   if (!payload.style || !payload.title) {
     setStatus(els.generateStatus, 'Style and title are required.', 'error');
@@ -259,6 +283,11 @@ async function handleGenerate() {
 
   els.generateBtn.disabled = true;
   setStatus(els.generateStatus, 'Submitting to Suno...', '');
+  // Clear any stale state from a previous generation so a leftover poll
+  // can't autosave the old tracks under this new task.
+  if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
+  currentResults = null;
+  currentTaskId = null;
   autosavedIds = new Set();
 
   try {
@@ -269,6 +298,7 @@ async function handleGenerate() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Generation failed');
+    if (!data.taskId) throw new Error('Suno did not return a taskId');
 
     currentTaskId = data.taskId;
     setStatus(els.generateStatus, 'Task started. Polling for results...', '');
@@ -305,16 +335,245 @@ function collectPayload() {
   return payload;
 }
 
+// ---------- Duet mode ----------
+
+function splitLyricsByDuet(lyrics, voiceA, voiceB) {
+  // Returns { a, b } — lyrics for each voice's stem.
+  // Recognized tags:
+  //   [Section: VoiceName ...]   — whole section goes to that voice
+  //   [Section: both / harmonized / call and response / VoiceA and VoiceB] — shared
+  //   (VoiceName) line text      — single line goes to that voice
+  //   plain line                 — inherits the current section's voice
+  // Section headers themselves are kept in BOTH stems so structure stays aligned.
+  const lines = (lyrics || '').split('\n');
+  const aLines = [];
+  const bLines = [];
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const aRe = new RegExp(`\\b${esc(voiceA)}\\b`, 'i');
+  const bRe = new RegExp(`\\b${esc(voiceB)}\\b`, 'i');
+  let target = 'both';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) { aLines.push(line); bLines.push(line); continue; }
+
+    const section = trimmed.match(/^\[([^\]]+)\]\s*$/);
+    if (section) {
+      const inner = section[1];
+      const hasA = aRe.test(inner);
+      const hasB = bRe.test(inner);
+      if (hasA && !hasB) target = 'a';
+      else if (hasB && !hasA) target = 'b';
+      else target = 'both';
+      aLines.push(line);
+      bLines.push(line);
+      continue;
+    }
+
+    const inline = trimmed.match(/^\(([^)]+)\)\s*(.*)$/);
+    if (inline) {
+      const speaker = inline[1];
+      const content = inline[2];
+      const isA = aRe.test(speaker);
+      const isB = bRe.test(speaker);
+      if (isA && !isB) aLines.push(content);
+      else if (isB && !isA) bLines.push(content);
+      else { aLines.push(content); bLines.push(content); }
+      continue;
+    }
+
+    if (target === 'a') aLines.push(line);
+    else if (target === 'b') bLines.push(line);
+    else { aLines.push(line); bLines.push(line); }
+  }
+
+  return { a: aLines.join('\n').trim(), b: bLines.join('\n').trim() };
+}
+
+async function handleGenerateDuet() {
+  const base = collectPayload();
+  if (!base.style || !base.title) {
+    setStatus(els.generateStatus, 'Style and title are required.', 'error');
+    return;
+  }
+  if (base.instrumental) {
+    setStatus(els.generateStatus, 'Duet mode requires vocals. Set Instrumental to No.', 'error');
+    return;
+  }
+  if (!base.prompt) {
+    setStatus(els.generateStatus, 'Duet mode needs lyrics with speaker tags.', 'error');
+    return;
+  }
+  const voiceA = (els.duetNameA.value || 'Voice A').trim();
+  const voiceB = (els.duetNameB.value || 'Voice B').trim();
+  if (!voiceA || !voiceB) {
+    setStatus(els.generateStatus, 'Both Voice A and Voice B names are required.', 'error');
+    return;
+  }
+  if (voiceA.toLowerCase() === voiceB.toLowerCase()) {
+    setStatus(els.generateStatus, 'Voice A and Voice B need different names.', 'error');
+    return;
+  }
+
+  els.generateBtn.disabled = true;
+  setStatus(els.generateStatus, 'Splitting lyrics and submitting both voices to Suno...', '');
+  // Clear single-track state so a leftover poll can't interfere.
+  if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
+  currentResults = null;
+  currentTaskId = null;
+  autosavedIds = new Set();
+
+  const { a: lyricsA, b: lyricsB } = splitLyricsByDuet(base.prompt, voiceA, voiceB);
+  const duetPairId = (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `pair-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const buildPayload = (name, gender, personaId, lyrics) => {
+    const p = { ...base };
+    p.title = `${base.title} — ${name}`;
+    p.prompt = lyrics || base.prompt; // fall back if split produced nothing
+    p.vocalGender = gender || null;
+    if (personaId) {
+      p.personaId = personaId;
+      p.personaModel = 'style_persona';
+    } else {
+      delete p.personaId;
+      delete p.personaModel;
+    }
+    return p;
+  };
+
+  const payloadA = buildPayload(voiceA, els.duetGenderA.value, els.duetPersonaA.value, lyricsA);
+  const payloadB = buildPayload(voiceB, els.duetGenderB.value, els.duetPersonaB.value, lyricsB);
+
+  const runVoice = async (payload, role, voiceName, partnerName) => {
+    // 1. Kick off Suno generation
+    const res = await fetch(`${API}/generate-music`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Generation failed');
+    if (!data.taskId) throw new Error('Suno did not return a taskId');
+
+    // 2. Poll until complete
+    const tracks = await pollDuetTask(data.taskId, voiceName);
+
+    // 3. Show the first complete voice in the player so the user has audio
+    if (!currentResults) {
+      currentTaskId = data.taskId;
+      currentResults = tracks;
+      showResults();
+    }
+
+    // 4. Autosave both versions with duet metadata
+    const duetMeta = { pair_id: duetPairId, role, voice_name: voiceName, partner_name: partnerName };
+    await autosaveDuetTracks(tracks, data.taskId, payload, duetMeta);
+    return tracks;
+  };
+
+  setStatus(els.generateStatus, `Both voices generating in parallel — this takes ~2–3 minutes.`, '');
+
+  const [resA, resB] = await Promise.allSettled([
+    runVoice(payloadA, 'a', voiceA, voiceB),
+    runVoice(payloadB, 'b', voiceB, voiceA),
+  ]);
+
+  els.generateBtn.disabled = false;
+  refreshCredits();
+  await refreshLibrary();
+
+  const fails = [resA, resB].filter(r => r.status === 'rejected');
+  if (fails.length === 0) {
+    setStatus(els.generateStatus, 'Duet complete. Both voices saved to library.', 'success');
+  } else if (fails.length === 1) {
+    const which = resA.status === 'rejected' ? voiceA : voiceB;
+    const reason = fails[0].reason && fails[0].reason.message || String(fails[0].reason);
+    setStatus(els.generateStatus, `${which} failed: ${reason}. The other voice was saved.`, 'error');
+  } else {
+    const msgs = fails.map(f => f.reason && f.reason.message || String(f.reason)).join(' | ');
+    setStatus(els.generateStatus, `Both generations failed: ${msgs}`, 'error');
+  }
+}
+
+async function pollDuetTask(taskId, voiceName) {
+  // Polls one Suno task to completion. Returns the final tracks array.
+  // Independent of the single-track currentTaskId so two of these can run in parallel.
+  const maxAttempts = 60; // ~5 minutes
+  await sleep(8000);
+  for (let attempts = 1; attempts <= maxAttempts; attempts++) {
+    let data;
+    try {
+      const res = await fetch(`${API}/check-status?taskId=${encodeURIComponent(taskId)}`);
+      data = await res.json();
+    } catch (e) {
+      // Transient network error — try again
+      await sleep(5000);
+      continue;
+    }
+    if (data.status === 'complete') return data.tracks || [];
+    if (data.status === 'error') throw new Error(data.message || `${voiceName}: Suno reported an error`);
+    setStatus(els.generateStatus, `[${voiceName}] ${data.status || 'pending'} (${attempts * 5}s)...`, '');
+    await sleep(5000);
+  }
+  throw new Error(`${voiceName}: timed out`);
+}
+
+async function autosaveDuetTracks(tracks, taskId, payload, duetMeta) {
+  const briefSnapshot = { ...collectPayload(), prompt: payload.prompt, title: payload.title };
+  briefSnapshot.duet = duetMeta;
+
+  const ops = (tracks || []).filter(t => t && t.id).map(async (track) => {
+    try {
+      const res = await fetch(`${API}/save-track`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          suno_audio_id: track.id,
+          suno_task_id: taskId,
+          suno_audio_url: track.audio_url || track.stream_audio_url,
+          title: payload.title,
+          style: payload.style,
+          prompt: payload.prompt,
+          model: track.model_name || payload.model,
+          instrumental: !!payload.instrumental,
+          duration: track.duration,
+          image_url: track.image_url,
+          tags: track.tags,
+          project_brief: payload.projectBrief,
+          music_brief: briefSnapshot,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `save failed (${res.status})`);
+      }
+    } catch (e) {
+      console.error(`duet autosave failed for ${duetMeta.voice_name} ${track.id}`, e);
+    }
+  });
+  await Promise.all(ops);
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 function pollForResults() {
-  if (pollingTimer) clearTimeout(pollingTimer);
+  if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
   let attempts = 0;
   const maxAttempts = 60; // 5 minutes at 5s interval
+  // Capture the task ID this poller belongs to. If currentTaskId changes
+  // (user kicked off a new generation), this poller exits silently — it
+  // must NOT autosave the old task's tracks under the new task's context.
+  const myTaskId = currentTaskId;
 
   const poll = async () => {
     attempts++;
+    if (currentTaskId !== myTaskId) return; // superseded by a newer generation
     try {
-      const res = await fetch(`${API}/check-status?taskId=${currentTaskId}`);
+      const res = await fetch(`${API}/check-status?taskId=${myTaskId}`);
       const data = await res.json();
+      if (currentTaskId !== myTaskId) return; // changed while we were awaiting
 
       if (data.status === 'streaming' || data.status === 'complete') {
         // We have at least streaming URLs
@@ -324,6 +583,7 @@ function pollForResults() {
           setStatus(els.generateStatus, `Done. Saving ${data.tracks.length} tracks to library...`, '');
           els.generateBtn.disabled = false;
           refreshCredits();
+          pollingTimer = null;
           await autosaveAll(data.tracks);
           return;
         } else {
@@ -340,10 +600,12 @@ function pollForResults() {
       } else {
         setStatus(els.generateStatus, 'Timed out waiting. Refresh to retry.', 'error');
         els.generateBtn.disabled = false;
+        pollingTimer = null;
       }
     } catch (e) {
       setStatus(els.generateStatus, `Error: ${e.message}`, 'error');
       els.generateBtn.disabled = false;
+      pollingTimer = null;
     }
   };
 
@@ -409,7 +671,7 @@ async function handleSave() {
         suno_audio_id: track.id,
         suno_task_id: currentTaskId,
         suno_audio_url: track.audio_url || track.stream_audio_url,
-        title: track.title,
+        title: els.title.value.trim() || track.title,
         style: els.style.value.trim(),
         prompt: els.prompt.value.trim(),
         model: track.model_name || els.model.value,
@@ -447,6 +709,7 @@ async function autosaveAll(tracks) {
   const styleVal = els.style.value.trim();
   const promptVal = els.prompt.value.trim();
   const instrumentalVal = els.instrumental.value === 'true';
+  const titleVal = els.title.value.trim();
 
   const toSave = tracks.filter(t => t && t.id && !autosavedIds.has(t.id));
   let okCount = 0;
@@ -462,7 +725,7 @@ async function autosaveAll(tracks) {
           suno_audio_id: track.id,
           suno_task_id: currentTaskId,
           suno_audio_url: track.audio_url || track.stream_audio_url,
-          title: track.title,
+          title: titleVal || track.title,
           style: styleVal,
           prompt: promptVal,
           model: track.model_name || els.model.value,
@@ -537,16 +800,22 @@ function renderLibrary() {
     return;
   }
 
-  els.libraryList.innerHTML = savedTracks.map(t => `
+  els.libraryList.innerHTML = savedTracks.map(t => {
+    const duet = t.music_brief && t.music_brief.duet;
+    const duetBadge = duet
+      ? `<span class="duet-badge" title="Duet pair ${escapeAttr(duet.pair_id || '')}">DUET · ${escapeHtml((duet.role || '').toUpperCase())} · ${escapeHtml(duet.voice_name || '')}</span>`
+      : '';
+    return `
     <div class="library-item" data-id="${t.id}">
       <div class="library-item-info">
-        <p class="library-item-title">${escapeHtml(t.title || 'Untitled')}</p>
+        <p class="library-item-title">${escapeHtml(t.title || 'Untitled')} ${duetBadge}</p>
         <p class="library-item-meta">${escapeHtml(t.style || '')} · ${formatDuration(t.duration)}</p>
       </div>
       <span class="library-item-date">${formatDate(t.created_at)}</span>
       <button class="library-item-delete" data-id="${t.id}" title="Delete">×</button>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   els.libraryList.querySelectorAll('.library-item').forEach(item => {
     item.addEventListener('click', (e) => {
@@ -627,14 +896,15 @@ async function refreshPersonas() {
 }
 
 function renderPersonaSelect() {
-  if (!els.personaSelect) return;
-  const current = els.personaSelect.value;
-  els.personaSelect.innerHTML = '<option value="">None</option>' + savedPersonas.map(p =>
+  const optionsHtml = '<option value="">None</option>' + savedPersonas.map(p =>
     `<option value="${escapeAttr(p.persona_id)}">${escapeHtml(p.name)}</option>`
   ).join('');
-  // Preserve selection if still present.
-  if (current && savedPersonas.some(p => p.persona_id === current)) {
-    els.personaSelect.value = current;
+  const isValid = (v) => v && savedPersonas.some(p => p.persona_id === v);
+  for (const sel of [els.personaSelect, els.duetPersonaA, els.duetPersonaB]) {
+    if (!sel) continue;
+    const current = sel.value;
+    sel.innerHTML = optionsHtml;
+    if (isValid(current)) sel.value = current;
   }
 }
 
