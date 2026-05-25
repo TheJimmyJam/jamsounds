@@ -7,3 +7,4 @@ node_modules/
 
 # Local library sync — keep MP3s off GitHub
 library/
+covers/

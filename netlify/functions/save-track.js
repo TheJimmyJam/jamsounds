@@ -1,6 +1,10 @@
 // POST /.netlify/functions/save-track
-// Downloads the Suno MP3 (and cover image), uploads to Supabase Storage, inserts a row in js_tracks.
-// Uses Supabase REST/Storage APIs directly via fetch — no dependencies.
+// Downloads the Suno MP3 (and cover image), embeds the cover into the MP3's
+// ID3v2 tags so it travels with the file (Apple Music, Spotify, Files, VLC
+// etc. all show it when playing). Then uploads the tagged MP3 + the image
+// separately to Supabase Storage, and inserts a row in js_tracks.
+
+const NodeID3 = require('node-id3');
 
 const BUCKET = 'jamsounds-audio';
 const USER_EMAIL = 'wcannon83@gmail.com'; // single-user app for now
@@ -38,9 +42,49 @@ exports.handler = async (event) => {
     // 1. Download audio from Suno
     const audioRes = await fetch(suno_audio_url);
     if (!audioRes.ok) throw new Error(`Failed to download audio (${audioRes.status})`);
-    const audioBuffer = Buffer.from(await audioRes.arrayBuffer());
+    let audioBuffer = Buffer.from(await audioRes.arrayBuffer());
 
-    // 2. Upload to Supabase Storage
+    // 2. (Best-effort) download cover image — used both for embedding into the
+    //    MP3's ID3 tag AND uploaded separately to Storage for the UI.
+    let imgBuffer = null;
+    let imgMime = 'image/jpeg';
+    if (image_url) {
+      try {
+        const imgRes = await fetch(image_url);
+        if (imgRes.ok) {
+          imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+          const ct = (imgRes.headers.get('content-type') || '').toLowerCase();
+          if (ct.includes('png')) imgMime = 'image/png';
+          else if (ct.includes('webp')) imgMime = 'image/webp';
+        }
+      } catch (e) {
+        console.warn('image fetch skipped:', e.message);
+      }
+    }
+
+    // 3. Embed ID3v2 tags (title, artist, album, cover art) into the MP3 buffer
+    //    so the cover travels with the file when downloaded/texted.
+    try {
+      const tags = {
+        title: title || 'Untitled',
+        artist: 'JamSounds',
+        album: title || 'JamSounds',
+      };
+      if (imgBuffer) {
+        tags.image = {
+          mime: imgMime,
+          type: { id: 3, name: 'front cover' },
+          description: 'Cover (front)',
+          imageBuffer: imgBuffer,
+        };
+      }
+      const tagged = NodeID3.write(tags, audioBuffer);
+      if (Buffer.isBuffer(tagged)) audioBuffer = tagged;
+    } catch (e) {
+      console.warn('ID3 embed failed, uploading untagged audio:', e.message);
+    }
+
+    // 4. Upload audio (now with cover embedded) to Supabase Storage
     const audioPath = `audio/${suno_audio_id}.mp3`;
     const upRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${audioPath}`, {
       method: 'POST',
@@ -59,27 +103,25 @@ exports.handler = async (event) => {
 
     const storage_audio_url = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${audioPath}`;
 
-    // 3. (Best-effort) upload cover image
+    // 5. (Best-effort) upload the cover image separately too, so the UI can
+    //    render it without parsing ID3 tags.
     let storage_image_url = null;
-    if (image_url) {
+    if (imgBuffer) {
       try {
-        const imgRes = await fetch(image_url);
-        if (imgRes.ok) {
-          const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
-          const imgPath = `images/${suno_audio_id}.jpg`;
-          const imgUp = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${imgPath}`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${SERVICE_KEY}`,
-              apikey: SERVICE_KEY,
-              'Content-Type': 'image/jpeg',
-              'x-upsert': 'true',
-            },
-            body: imgBuffer,
-          });
-          if (imgUp.ok) {
-            storage_image_url = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${imgPath}`;
-          }
+        const ext = imgMime === 'image/png' ? 'png' : (imgMime === 'image/webp' ? 'webp' : 'jpg');
+        const imgPath = `images/${suno_audio_id}.${ext}`;
+        const imgUp = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${imgPath}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${SERVICE_KEY}`,
+            apikey: SERVICE_KEY,
+            'Content-Type': imgMime,
+            'x-upsert': 'true',
+          },
+          body: imgBuffer,
+        });
+        if (imgUp.ok) {
+          storage_image_url = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${imgPath}`;
         }
       } catch (e) {
         console.warn('image upload skipped:', e.message);
