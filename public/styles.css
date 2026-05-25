@@ -452,17 +452,17 @@ audio {
 .library-item-delete:hover { color: var(--danger); }
 
 .library-item-download {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
   color: var(--text-3);
   padding: 2px 6px;
   font-size: 14px;
   border-radius: var(--radius-sm, 4px);
 }
 
-.library-item-download:hover { color: var(--text-1, #fff); background: var(--surface-2, #2a2a2a); }
+.library-item-download:hover:not(:disabled) { color: var(--text-1, #fff); background: var(--surface-2, #2a2a2a); }
+.library-item-download:disabled { opacity: 0.6; cursor: default; }
 
 /* ===== Mobile ≤ 640px ===== */
 @media (max-width: 640px) {

@@ -808,7 +808,7 @@ function renderLibrary() {
     const dlUrl = t.storage_audio_url || t.suno_audio_url || '';
     const dlName = `${(t.title || 'untitled').replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 60)}.mp3`;
     const downloadBtn = dlUrl
-      ? `<a class="library-item-download" href="${escapeAttr(dlUrl)}" download="${escapeAttr(dlName)}" title="Download MP3">↓</a>`
+      ? `<button class="library-item-download" data-url="${escapeAttr(dlUrl)}" data-name="${escapeAttr(dlName)}" title="Download MP3">↓</button>`
       : '';
     return `
     <div class="library-item" data-id="${t.id}">
@@ -847,6 +847,46 @@ function renderLibrary() {
       }
     });
   });
+
+  els.libraryList.querySelectorAll('.library-item-download').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const url = btn.dataset.url;
+      const name = btn.dataset.name || 'track.mp3';
+      if (!url) return;
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        await downloadFromUrl(url, name);
+        btn.textContent = '✓';
+        setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1200);
+      } catch (err) {
+        console.error('download failed', err);
+        alert(`Download failed: ${err.message}`);
+        btn.textContent = original;
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+// Fetches a remote file and triggers a save dialog with the chosen filename.
+// Needed because the <a download> attribute is ignored for cross-origin URLs
+// (e.g. Supabase Storage), so the browser would otherwise just navigate to it.
+async function downloadFromUrl(url, filename) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoke after the click has been handled.
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
 function playSavedTrack(t) {
