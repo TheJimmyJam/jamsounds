@@ -10,6 +10,17 @@ const els = {
   soundsLike: document.getElementById('sounds-like'),
   soundsLikeBtn: document.getElementById('sounds-like-btn'),
   soundsLikeStatus: document.getElementById('sounds-like-status'),
+  dropZone: document.getElementById('drop-zone'),
+  dropZoneLabel: document.getElementById('drop-zone-label'),
+  refFile: document.getElementById('ref-file'),
+  refLoaded: document.getElementById('ref-loaded'),
+  refName: document.getElementById('ref-name'),
+  refSize: document.getElementById('ref-size'),
+  refPreview: document.getElementById('ref-preview'),
+  refClear: document.getElementById('ref-clear'),
+  refStatus: document.getElementById('ref-status'),
+  audioWeightSlider: document.getElementById('audio-weight-slider'),
+  audioWeightOut: document.getElementById('audio-weight-out'),
   title: document.getElementById('title'),
   model: document.getElementById('model'),
   style: document.getElementById('style'),
@@ -41,6 +52,7 @@ let currentTaskId = null;
 let activeVersion = 0;
 let pollingTimer = null;
 let savedTracks = [];
+let referenceUploadUrl = null; // public URL of uploaded MP3 reference (if any)
 
 // ---------- Init ----------
 
@@ -51,6 +63,21 @@ async function init() {
   els.soundsLikeBtn.addEventListener('click', handleSoundsLike);
   els.generateBtn.addEventListener('click', handleGenerate);
   els.saveBtn.addEventListener('click', handleSave);
+
+  // Reference MP3 upload — drag/drop + file picker
+  els.dropZone.addEventListener('click', () => els.refFile.click());
+  els.refFile.addEventListener('change', e => e.target.files[0] && handleReferenceFile(e.target.files[0]));
+  els.dropZone.addEventListener('dragover', e => { e.preventDefault(); els.dropZone.classList.add('dragover'); });
+  els.dropZone.addEventListener('dragleave', () => els.dropZone.classList.remove('dragover'));
+  els.dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    els.dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) handleReferenceFile(e.dataTransfer.files[0]);
+  });
+  els.refClear.addEventListener('click', clearReference);
+  els.audioWeightSlider.addEventListener('input', () => {
+    els.audioWeightOut.textContent = parseFloat(els.audioWeightSlider.value).toFixed(2);
+  });
 
   document.querySelectorAll('.version-btn').forEach(btn => {
     btn.addEventListener('click', () => switchVersion(parseInt(btn.dataset.version, 10)));
@@ -144,6 +171,65 @@ async function handleSoundsLike() {
   }
 }
 
+// ---------- Reference MP3 upload ----------
+
+async function handleReferenceFile(file) {
+  if (!file.type.startsWith('audio/')) {
+    setStatus(els.refStatus, 'Please choose an audio file (MP3).', 'error');
+    return;
+  }
+  if (file.size > 6 * 1024 * 1024) {
+    setStatus(els.refStatus, `${(file.size/1024/1024).toFixed(1)}MB is over the 6MB limit. Trim to a 30-60s clip.`, 'error');
+    return;
+  }
+
+  setStatus(els.refStatus, `Uploading ${file.name}...`, '');
+  els.dropZoneLabel.textContent = 'Uploading...';
+
+  try {
+    const res = await fetch(`${API}/upload-reference`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'audio/mpeg' },
+      body: file,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+
+    referenceUploadUrl = data.publicUrl;
+    els.refName.textContent = file.name;
+    els.refSize.textContent = `(${(data.sizeBytes/1024/1024).toFixed(2)}MB)`;
+    els.refPreview.src = data.publicUrl;
+    els.refLoaded.classList.remove('hidden');
+    els.dropZone.classList.add('loaded');
+    els.dropZoneLabel.textContent = 'Reference loaded — see preview below';
+    setStatus(els.refStatus, 'Reference uploaded. Suno will mimic its feel when you Generate.', 'success');
+    updateGenerateLabel();
+  } catch (e) {
+    setStatus(els.refStatus, `Error: ${e.message}`, 'error');
+    els.dropZoneLabel.textContent = 'Drag MP3 here or click to choose';
+    referenceUploadUrl = null;
+  }
+}
+
+function clearReference() {
+  referenceUploadUrl = null;
+  els.refFile.value = '';
+  els.refPreview.src = '';
+  els.refLoaded.classList.add('hidden');
+  els.dropZone.classList.remove('loaded');
+  els.dropZoneLabel.textContent = 'Drag MP3 here or click to choose';
+  setStatus(els.refStatus, '', '');
+  updateGenerateLabel();
+}
+
+function updateGenerateLabel() {
+  if (referenceUploadUrl) {
+    els.generateLabel.textContent = 'Generate from MP3 reference · ~10 credits';
+  } else {
+    els.generateLabel.textContent = 'Generate · ~8 credits';
+  }
+}
+
 // ---------- Generate ----------
 
 async function handleGenerate() {
@@ -175,7 +261,7 @@ async function handleGenerate() {
 }
 
 function collectPayload() {
-  return {
+  const payload = {
     title: els.title.value.trim(),
     style: els.style.value.trim(),
     prompt: els.prompt.value.trim(),
@@ -185,9 +271,15 @@ function collectPayload() {
     vocalGender: els.vocalGender.value || null,
     styleWeight: parseFloat(els.styleWeight.value) || null,
     weirdnessConstraint: parseFloat(els.weirdness.value) || null,
-    audioWeight: parseFloat(els.audioWeight.value) || null,
     projectBrief: els.projectBrief.value.trim(),
   };
+  if (referenceUploadUrl) {
+    payload.uploadUrl = referenceUploadUrl;
+    payload.audioWeight = parseFloat(els.audioWeightSlider.value);
+  } else {
+    payload.audioWeight = parseFloat(els.audioWeight.value) || null;
+  }
+  return payload;
 }
 
 function pollForResults() {

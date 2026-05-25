@@ -1,7 +1,8 @@
 // POST /.netlify/functions/generate-music
-// Body: { title, style, prompt, model, instrumental, negativeTags, vocalGender, styleWeight, weirdnessConstraint, audioWeight }
+// Body: { title, style, prompt, model, instrumental, negativeTags, vocalGender, styleWeight, weirdnessConstraint, audioWeight, uploadUrl }
 // Returns: { taskId }
-// Starts a Suno music generation task using Custom Mode for full control.
+// - If uploadUrl is present: routes to Suno's /generate/upload-cover endpoint (uses the audio as a reference).
+// - Otherwise: regular Custom Mode /generate.
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
@@ -20,10 +21,16 @@ exports.handler = async (event) => {
     styleWeight,
     weirdnessConstraint,
     audioWeight,
+    uploadUrl,
   } = body;
 
   if (!title || !style) return json(400, { error: 'title and style are required' });
   if (!instrumental && !prompt) return json(400, { error: 'prompt (lyrics) required when instrumental is false' });
+
+  const isCover = !!uploadUrl;
+  const endpoint = isCover
+    ? 'https://api.sunoapi.org/api/v1/generate/upload-cover'
+    : 'https://api.sunoapi.org/api/v1/generate';
 
   // Build Suno payload — Custom Mode for full control.
   const sunoPayload = {
@@ -32,8 +39,6 @@ exports.handler = async (event) => {
     model,
     title,
     style,
-    // callBackUrl is required by Suno even though we poll instead.
-    // We give it a no-op URL — Suno will hit it but we ignore.
     callBackUrl: 'https://example.com/no-op',
   };
 
@@ -43,9 +48,10 @@ exports.handler = async (event) => {
   if (styleWeight != null) sunoPayload.styleWeight = styleWeight;
   if (weirdnessConstraint != null) sunoPayload.weirdnessConstraint = weirdnessConstraint;
   if (audioWeight != null) sunoPayload.audioWeight = audioWeight;
+  if (isCover) sunoPayload.uploadUrl = uploadUrl;
 
   try {
-    const res = await fetch('https://api.sunoapi.org/api/v1/generate', {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -63,7 +69,7 @@ exports.handler = async (event) => {
       });
     }
 
-    return json(200, { taskId: data.data?.taskId });
+    return json(200, { taskId: data.data?.taskId, mode: isCover ? 'cover' : 'generate' });
   } catch (e) {
     return json(500, { error: e.message });
   }
