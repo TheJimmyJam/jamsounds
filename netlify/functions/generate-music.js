@@ -1,8 +1,11 @@
 // POST /.netlify/functions/generate-music
-// Body: { title, style, prompt, model, instrumental, negativeTags, vocalGender, styleWeight, weirdnessConstraint, audioWeight, uploadUrl }
+// Body: { title, style, prompt, model, instrumental, negativeTags, vocalGender,
+//         styleWeight, weirdnessConstraint, audioWeight, uploadUrl,
+//         personaId, personaModel }
 // Returns: { taskId }
 // - If uploadUrl is present: routes to Suno's /generate/upload-cover endpoint (uses the audio as a reference).
 // - Otherwise: regular Custom Mode /generate.
+// - If personaId is present: forwards it (and personaModel) so Suno reuses that voice profile.
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
@@ -22,6 +25,8 @@ exports.handler = async (event) => {
     weirdnessConstraint,
     audioWeight,
     uploadUrl,
+    personaId,
+    personaModel,
   } = body;
 
   if (!title || !style) return json(400, { error: 'title and style are required' });
@@ -49,6 +54,10 @@ exports.handler = async (event) => {
   if (weirdnessConstraint != null) sunoPayload.weirdnessConstraint = weirdnessConstraint;
   if (audioWeight != null) sunoPayload.audioWeight = audioWeight;
   if (isCover) sunoPayload.uploadUrl = uploadUrl;
+  if (personaId) {
+    sunoPayload.personaId = personaId;
+    sunoPayload.personaModel = personaModel || 'style_persona';
+  }
 
   try {
     const res = await fetch(endpoint, {

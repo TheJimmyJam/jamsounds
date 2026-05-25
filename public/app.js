@@ -31,6 +31,7 @@ const els = {
   styleWeight: document.getElementById('style-weight'),
   weirdness: document.getElementById('weirdness'),
   audioWeight: document.getElementById('audio-weight'),
+  personaSelect: document.getElementById('persona-select'),
   generateBtn: document.getElementById('generate-btn'),
   generateLabel: document.getElementById('generate-label'),
   generateStatus: document.getElementById('generate-status'),
@@ -42,9 +43,12 @@ const els = {
   playerMeta: document.getElementById('player-meta'),
   audioEl: document.getElementById('audio-el'),
   saveBtn: document.getElementById('save-btn'),
+  savePersonaBtn: document.getElementById('save-persona-btn'),
   downloadLink: document.getElementById('download-link'),
   libraryList: document.getElementById('library-list'),
   libraryCount: document.getElementById('library-count'),
+  personasList: document.getElementById('personas-list'),
+  personasCount: document.getElementById('personas-count'),
 };
 
 let currentResults = null; // [{audio_url, image_url, title, duration, ...}, {...}]
@@ -52,6 +56,7 @@ let currentTaskId = null;
 let activeVersion = 0;
 let pollingTimer = null;
 let savedTracks = [];
+let savedPersonas = [];
 let referenceUploadUrl = null; // public URL of uploaded MP3 reference (if any)
 let autosavedIds = new Set(); // suno_audio_ids already autosaved for the current generation
 let autosaveRunning = false;
@@ -59,12 +64,13 @@ let autosaveRunning = false;
 // ---------- Init ----------
 
 async function init() {
-  await Promise.all([refreshCredits(), refreshLibrary()]);
+  await Promise.all([refreshCredits(), refreshLibrary(), refreshPersonas()]);
 
   els.translateBtn.addEventListener('click', handleTranslate);
   els.soundsLikeBtn.addEventListener('click', handleSoundsLike);
   els.generateBtn.addEventListener('click', handleGenerate);
   els.saveBtn.addEventListener('click', handleSave);
+  if (els.savePersonaBtn) els.savePersonaBtn.addEventListener('click', handleSavePersona);
 
   // Reference MP3 upload — drag/drop + file picker
   els.dropZone.addEventListener('click', () => els.refFile.click());
@@ -282,6 +288,10 @@ function collectPayload() {
   } else {
     payload.audioWeight = parseFloat(els.audioWeight.value) || null;
   }
+  if (els.personaSelect && els.personaSelect.value) {
+    payload.personaId = els.personaSelect.value;
+    payload.personaModel = 'style_persona';
+  }
   return payload;
 }
 
@@ -357,6 +367,11 @@ function switchVersion(idx) {
 
   // Show ✓ if this version was already (auto)saved, otherwise ♡.
   updateSaveButtonForActive();
+  // Reset persona button to default for whichever track is now active.
+  if (els.savePersonaBtn) {
+    els.savePersonaBtn.textContent = '👤';
+    els.savePersonaBtn.disabled = false;
+  }
 }
 
 function formatDuration(seconds) {
@@ -559,6 +574,8 @@ function playSavedTrack(t) {
     tags: t.style,
     model_name: t.model,
   }];
+  // Restore the original Suno task ID so Save-as-Persona works for library tracks too.
+  currentTaskId = t.suno_task_id || null;
   els.playerEmpty.classList.add('hidden');
   els.player.classList.remove('hidden');
   switchVersion(0);
@@ -583,6 +600,130 @@ function escapeHtml(s) {
 function setStatus(el, msg, kind) {
   el.textContent = msg;
   el.className = 'status-line' + (kind ? ` ${kind}` : '');
+}
+
+// ---------- Personas ----------
+
+async function refreshPersonas() {
+  try {
+    const res = await fetch(`${API}/list-personas`);
+    const data = await res.json();
+    savedPersonas = data.personas || [];
+    renderPersonas();
+    renderPersonaSelect();
+  } catch (e) {
+    console.error('personas', e);
+  }
+}
+
+function renderPersonaSelect() {
+  if (!els.personaSelect) return;
+  const current = els.personaSelect.value;
+  els.personaSelect.innerHTML = '<option value="">None</option>' + savedPersonas.map(p =>
+    `<option value="${escapeAttr(p.persona_id)}">${escapeHtml(p.name)}</option>`
+  ).join('');
+  // Preserve selection if still present.
+  if (current && savedPersonas.some(p => p.persona_id === current)) {
+    els.personaSelect.value = current;
+  }
+}
+
+function renderPersonas() {
+  if (!els.personasList) return;
+  els.personasCount.textContent = `${savedPersonas.length} saved`;
+  if (!savedPersonas.length) {
+    els.personasList.innerHTML = '<p class="empty-hint">No personas yet.</p>';
+    return;
+  }
+  els.personasList.innerHTML = savedPersonas.map(p => `
+    <div class="library-item" data-id="${escapeAttr(p.id)}">
+      <div class="library-item-info">
+        <p class="library-item-title">${escapeHtml(p.name)}</p>
+        <p class="library-item-meta">${escapeHtml((p.description || '').slice(0, 80))}</p>
+      </div>
+      <span class="library-item-date">${formatDate(p.created_at)}</span>
+      <button class="library-item-delete" data-id="${escapeAttr(p.id)}" title="Delete">×</button>
+    </div>
+  `).join('');
+
+  els.personasList.querySelectorAll('.library-item-delete').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('Delete this persona? Songs already generated with it are unaffected.')) return;
+      const id = btn.dataset.id;
+      try {
+        await fetch(`${API}/list-personas?id=${id}`, { method: 'DELETE' });
+        await refreshPersonas();
+      } catch (e) {
+        alert(`Delete error: ${e.message}`);
+      }
+    });
+  });
+
+  // Click a persona row to auto-select it in the generate form.
+  els.personasList.querySelectorAll('.library-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.classList.contains('library-item-delete')) return;
+      const id = item.dataset.id;
+      const p = savedPersonas.find(x => x.id === id);
+      if (p && els.personaSelect) {
+        els.personaSelect.value = p.persona_id;
+        setStatus(els.generateStatus, `Persona "${p.name}" selected for next generation.`, 'success');
+      }
+    });
+  });
+}
+
+async function handleSavePersona() {
+  if (!currentResults) return;
+  const track = currentResults[activeVersion];
+  if (!track || !track.id || !currentTaskId) {
+    alert('No active track to make a persona from. Generate or open a saved track first.');
+    return;
+  }
+
+  const name = (prompt('Persona name (e.g. "Megi" or "Jimmy"):') || '').trim();
+  if (!name) return;
+  const description = (prompt(
+    'Describe this voice in 1–2 sentences (genre, vocal qualities, mood). Suno requires this.',
+    `${name} — ${els.style.value || 'custom vocal'}`
+  ) || '').trim();
+  if (!description) return;
+
+  els.savePersonaBtn.disabled = true;
+  els.savePersonaBtn.textContent = '...';
+  setStatus(els.generateStatus, `Minting persona "${name}"...`, '');
+
+  try {
+    const res = await fetch(`${API}/create-persona`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        taskId: currentTaskId,
+        audioId: track.id,
+        name,
+        description,
+        // Default Suno will use vocalStart=0, vocalEnd=30 (must be 10–30s segment).
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Persona creation failed');
+    await refreshPersonas();
+    if (els.personaSelect && data.persona?.persona_id) {
+      els.personaSelect.value = data.persona.persona_id;
+    }
+    setStatus(els.generateStatus, `Persona "${name}" saved. Selected for next generation.`, 'success');
+    els.savePersonaBtn.textContent = '✓';
+  } catch (e) {
+    setStatus(els.generateStatus, `Persona error: ${e.message}`, 'error');
+    els.savePersonaBtn.textContent = '👤';
+  } finally {
+    els.savePersonaBtn.disabled = false;
+  }
+}
+
+function escapeAttr(s) {
+  return escapeHtml(s);
 }
 
 init();
