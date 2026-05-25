@@ -59,6 +59,15 @@
         <input id="style" type="text" maxlength="1000" placeholder="ambient electronic, lo-fi, warm pads, 80 BPM" />
       </div>
 
+      <div class="field" style="display:flex;gap:6px;align-items:flex-end;">
+        <div style="flex:1;">
+          <label for="sounds-like">Sounds like <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— reference song (e.g. "Dylan LeBlanc Coyote")</span></label>
+          <input id="sounds-like" type="text" placeholder="Artist - Song name" />
+        </div>
+        <button id="sounds-like-btn" class="btn-secondary" style="margin-top:0;height:32px;white-space:nowrap;">Fill style</button>
+      </div>
+      <p id="sounds-like-status" class="status-line"></p>
+
       <div class="field">
         <label for="prompt">Lyrics / prompt <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— if vocals are on, this is sung VERBATIM. Use [Verse] / [Chorus] tags.</span></label>
         <textarea id="prompt" rows="6" maxlength="5000" placeholder="[Verse 1]&#10;Actual words to be sung, line by line&#10;&#10;[Chorus]&#10;The hook&#10;&#10;..."></textarea>

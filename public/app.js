@@ -7,6 +7,9 @@ const els = {
   projectBrief: document.getElementById('project-brief'),
   translateBtn: document.getElementById('translate-btn'),
   translateStatus: document.getElementById('translate-status'),
+  soundsLike: document.getElementById('sounds-like'),
+  soundsLikeBtn: document.getElementById('sounds-like-btn'),
+  soundsLikeStatus: document.getElementById('sounds-like-status'),
   title: document.getElementById('title'),
   model: document.getElementById('model'),
   style: document.getElementById('style'),
@@ -45,6 +48,7 @@ async function init() {
   await Promise.all([refreshCredits(), refreshLibrary()]);
 
   els.translateBtn.addEventListener('click', handleTranslate);
+  els.soundsLikeBtn.addEventListener('click', handleSoundsLike);
   els.generateBtn.addEventListener('click', handleGenerate);
   els.saveBtn.addEventListener('click', handleSave);
 
@@ -101,6 +105,42 @@ async function handleTranslate() {
     setStatus(els.translateStatus, `Error: ${e.message}`, 'error');
   } finally {
     els.translateBtn.disabled = false;
+  }
+}
+
+// ---------- Sounds like (reference song) ----------
+
+async function handleSoundsLike() {
+  const query = els.soundsLike.value.trim();
+  if (!query) {
+    setStatus(els.soundsLikeStatus, 'Type a song name (e.g. "Dylan LeBlanc Coyote").', 'error');
+    return;
+  }
+
+  els.soundsLikeBtn.disabled = true;
+  setStatus(els.soundsLikeStatus, 'Looking up on Last.fm...', '');
+
+  try {
+    const res = await fetch(`${API}/sounds-like`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Sounds-like failed');
+
+    if (data.style) els.style.value = data.style;
+    if (data.vocalGender) els.vocalGender.value = data.vocalGender;
+
+    const ref = data.reference || {};
+    const refText = ref.name && ref.artist
+      ? `Matched: "${ref.name}" by ${ref.artist}. Style filled in. ${data.notes || ''}`
+      : 'Style filled in.';
+    setStatus(els.soundsLikeStatus, refText, 'success');
+  } catch (e) {
+    setStatus(els.soundsLikeStatus, `Error: ${e.message}`, 'error');
+  } finally {
+    els.soundsLikeBtn.disabled = false;
   }
 }
 
