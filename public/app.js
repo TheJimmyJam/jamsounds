@@ -763,6 +763,13 @@ async function handleSave() {
     els.saveBtn.classList.add('saved');
     els.saveBtn.textContent = '✓';
     if (track.id) autosavedIds.add(track.id);
+    // Mark this saved row as the active library track so the rocketship
+    // (publish-to-JamPlays) can find it without requiring a re-click from
+    // the library panel.
+    if (data.track && data.track.id) {
+      activeLibraryTrackId = data.track.id;
+      playLoggedForCurrent = false;
+    }
     await refreshLibrary();
   } catch (e) {
     alert(`Save error: ${e.message}`);
@@ -815,6 +822,12 @@ async function autosaveAll(tracks) {
       if (!res.ok) throw new Error(data.error || 'Save failed');
       autosavedIds.add(track.id);
       okCount++;
+      // If this version is the one currently in the player, link it to its
+      // new library row so the rocketship (publish-to-JamPlays) can find it.
+      if (data.track && data.track.id && currentResults && currentResults[activeVersion] && track.id === currentResults[activeVersion].id) {
+        activeLibraryTrackId = data.track.id;
+        playLoggedForCurrent = false;
+      }
     } catch (e) {
       console.error('autosave failed for', track.id, e);
       failures.push({ id: track.id, msg: e.message });
@@ -845,6 +858,13 @@ function updateSaveButtonForActive() {
     els.saveBtn.textContent = '✓';
     els.saveBtn.disabled = true;
     els.saveBtn.title = 'Already in library';
+    // Keep the rocketship wired to this version's library row so publishing
+    // works after switching between v1 and v2.
+    const libRow = savedTracks && savedTracks.find(r => r.suno_audio_id === track.id);
+    if (libRow && libRow.id) {
+      activeLibraryTrackId = libRow.id;
+      playLoggedForCurrent = false;
+    }
   } else {
     els.saveBtn.classList.remove('saved');
     els.saveBtn.textContent = '♡';
