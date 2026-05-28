@@ -435,6 +435,27 @@ audio {
   white-space: nowrap;
 }
 
+.library-item.drop-target {
+  outline: 2px dashed #ff9b5e;
+  outline-offset: -2px;
+  background: rgba(255, 155, 94, 0.08);
+}
+.library-item.replacing {
+  opacity: 0.6;
+  pointer-events: none;
+}
+.library-item.replacing::after {
+  content: 'Replacing...';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: #ff9b5e;
+  font-weight: 600;
+}
+.library-item { position: relative; }
+
 .play-count-badge {
   display: inline-flex;
   align-items: center;

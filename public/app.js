@@ -121,6 +121,15 @@ async function init() {
     btn.addEventListener('click', () => switchVersion(parseInt(btn.dataset.version, 10)));
   });
 
+  // Prevent the browser from opening files dropped outside a library row
+  // (otherwise the page would navigate away to the dropped file).
+  window.addEventListener('dragover', (e) => {
+    if (e.dataTransfer && e.dataTransfer.types.includes('Files')) e.preventDefault();
+  });
+  window.addEventListener('drop', (e) => {
+    if (e.dataTransfer && e.dataTransfer.types.includes('Files')) e.preventDefault();
+  });
+
   // Log a play the first time audio starts for the currently-loaded library
   // track. Only saved library tracks (those with a js_tracks.id) are tracked;
   // freshly-generated tracks aren't counted until they're saved.
@@ -895,6 +904,28 @@ function renderLibrary() {
     });
   });
 
+  // Drag-and-drop: drop an audio/* or image/* file on a row to replace
+  // that track's audio or cover art in place. Works for files of any size
+  // because the browser uploads directly to Supabase via a signed URL.
+  els.libraryList.querySelectorAll('.library-item').forEach(item => {
+    item.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer || !e.dataTransfer.types.includes('Files')) return;
+      e.preventDefault();
+      item.classList.add('drop-target');
+    });
+    item.addEventListener('dragleave', () => item.classList.remove('drop-target'));
+    item.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      item.classList.remove('drop-target');
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      const id = item.dataset.id;
+      const t = savedTracks.find(x => x.id === id);
+      if (!t) return;
+      await handleReplaceDrop(t, file, item);
+    });
+  });
+
   els.libraryList.querySelectorAll('.library-item-download').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -915,6 +946,87 @@ function renderLibrary() {
         btn.disabled = false;
       }
     });
+  });
+}
+
+async function handleReplaceDrop(track, file, rowEl) {
+  const isAudio = file.type.startsWith('audio/');
+  const isImage = file.type.startsWith('image/');
+  if (!isAudio && !isImage) {
+    alert(`Unsupported file type: ${file.type}. Drop an audio/* or image/* file.`);
+    return;
+  }
+  const kind = isAudio ? 'audio' : 'image';
+  const niceKind = isAudio ? 'audio' : 'cover art';
+  if (!confirm(`Replace ${niceKind} for "${track.title}" with "${file.name}"?\n\nThis overwrites the existing file in storage and can't be undone.`)) {
+    return;
+  }
+
+  rowEl.classList.add('replacing');
+  try {
+    // 1. Decode audio duration up front (used in finalize for audio replacements)
+    let duration = null;
+    if (isAudio) {
+      try { duration = await decodeAudioDuration(file); } catch (e) { console.warn('duration decode failed', e); }
+    }
+
+    // 2. Get a signed upload URL pointing at a temp path
+    const sigRes = await fetch(`${API}/get-upload-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackId: track.id, kind, mimeType: file.type }),
+    });
+    const sig = await sigRes.json();
+    if (!sigRes.ok) throw new Error(sig.error || 'Could not get upload URL');
+
+    // 3. PUT the file directly to Supabase Storage
+    const putRes = await fetch(sig.signedUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${sig.token}`,
+        'Content-Type': file.type,
+        'x-upsert': 'true',
+      },
+      body: file,
+    });
+    if (!putRes.ok) throw new Error(`Direct upload failed: ${putRes.status} ${await putRes.text()}`);
+
+    // 4. Tell the backend to finalize (re-embed cover, move to final path, update DB)
+    const finRes = await fetch(`${API}/finalize-replace`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        trackId: track.id,
+        kind,
+        tempPath: sig.tempPath,
+        finalPath: sig.finalPath,
+        duration,
+      }),
+    });
+    const fin = await finRes.json();
+    if (!finRes.ok) throw new Error(fin.error || 'Finalize failed');
+
+    setStatus(els.generateStatus, `Replaced ${niceKind} for "${track.title}".`, 'success');
+    await refreshLibrary();
+  } catch (e) {
+    alert(`Replace failed: ${e.message}`);
+    rowEl.classList.remove('replacing');
+  }
+}
+
+function decodeAudioDuration(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('audio');
+    a.preload = 'metadata';
+    a.onloadedmetadata = () => {
+      const d = a.duration;
+      URL.revokeObjectURL(url);
+      if (d && isFinite(d)) resolve(d);
+      else reject(new Error('Could not read duration'));
+    };
+    a.onerror = () => { URL.revokeObjectURL(url); reject(new Error('audio decode error')); };
+    a.src = url;
   });
 }
 
