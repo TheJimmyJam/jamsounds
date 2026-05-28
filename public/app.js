@@ -55,6 +55,8 @@ const els = {
   downloadLink: document.getElementById('download-link'),
   libraryList: document.getElementById('library-list'),
   libraryCount: document.getElementById('library-count'),
+  topPlayedList: document.getElementById('top-played-list'),
+  topPlayedCount: document.getElementById('top-played-count'),
   personasList: document.getElementById('personas-list'),
   personasCount: document.getElementById('personas-count'),
   personaForm: document.getElementById('persona-form'),
@@ -76,6 +78,8 @@ let savedPersonas = [];
 let referenceUploadUrl = null; // public URL of uploaded MP3 reference (if any)
 let autosavedIds = new Set(); // suno_audio_ids already autosaved for the current generation
 let autosaveRunning = false;
+let activeLibraryTrackId = null; // js_tracks.id of the saved track currently in the player
+let playLoggedForCurrent = false; // ensures one log per track-load (no pause/resume spam)
 
 // ---------- Init ----------
 
@@ -116,6 +120,39 @@ async function init() {
   document.querySelectorAll('.version-btn').forEach(btn => {
     btn.addEventListener('click', () => switchVersion(parseInt(btn.dataset.version, 10)));
   });
+
+  // Log a play the first time audio starts for the currently-loaded library
+  // track. Only saved library tracks (those with a js_tracks.id) are tracked;
+  // freshly-generated tracks aren't counted until they're saved.
+  if (els.audioEl) {
+    els.audioEl.addEventListener('play', () => {
+      if (!activeLibraryTrackId || playLoggedForCurrent) return;
+      playLoggedForCurrent = true;
+      logPlay(activeLibraryTrackId);
+    });
+  }
+}
+
+async function logPlay(trackId) {
+  try {
+    const res = await fetch(`${API}/log-play`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: trackId }),
+    });
+    if (!res.ok) throw new Error(`log-play ${res.status}`);
+    const data = await res.json();
+    // Update the in-memory row so the badge bumps immediately without a full refetch.
+    const t = savedTracks.find(x => x.id === trackId);
+    if (t) {
+      t.play_count = data.play_count;
+      t.last_played_at = new Date().toISOString();
+    }
+    renderLibrary();
+    renderTopPlayed();
+  } catch (e) {
+    console.warn('logPlay failed', e);
+  }
 }
 
 // ---------- Credits ----------
@@ -288,6 +325,8 @@ async function handleGenerate() {
   if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
   currentResults = null;
   currentTaskId = null;
+  activeLibraryTrackId = null;
+  playLoggedForCurrent = false;
   autosavedIds = new Set();
 
   try {
@@ -421,6 +460,8 @@ async function handleGenerateDuet() {
   if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
   currentResults = null;
   currentTaskId = null;
+  activeLibraryTrackId = null;
+  playLoggedForCurrent = false;
   autosavedIds = new Set();
 
   const { a: lyricsA, b: lyricsB } = splitLyricsByDuet(base.prompt, voiceA, voiceB);
@@ -787,6 +828,7 @@ async function refreshLibrary() {
     const data = await res.json();
     savedTracks = data.tracks || [];
     renderLibrary();
+    renderTopPlayed();
     els.tracksPill.textContent = `${savedTracks.length} saved`;
     els.libraryCount.textContent = `${savedTracks.length} saved`;
   } catch (e) {
@@ -805,6 +847,10 @@ function renderLibrary() {
     const duetBadge = duet
       ? `<span class="duet-badge" title="Duet pair ${escapeAttr(duet.pair_id || '')}">DUET · ${escapeHtml((duet.role || '').toUpperCase())} · ${escapeHtml(duet.voice_name || '')}</span>`
       : '';
+    const plays = t.play_count || 0;
+    const playBadge = plays > 0
+      ? `<span class="play-count-badge${plays >= 5 ? ' hot' : ''}" title="${plays} play${plays === 1 ? '' : 's'}">▶ ${plays}</span>`
+      : '';
     const dlUrl = t.storage_audio_url || t.suno_audio_url || '';
     const dlName = `${(t.title || 'untitled').replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 60)}.mp3`;
     const downloadBtn = dlUrl
@@ -816,6 +862,7 @@ function renderLibrary() {
         <p class="library-item-title">${escapeHtml(t.title || 'Untitled')} ${duetBadge}</p>
         <p class="library-item-meta">${escapeHtml(t.style || '')} · ${formatDuration(t.duration)}</p>
       </div>
+      ${playBadge}
       <span class="library-item-date">${formatDate(t.created_at)}</span>
       ${downloadBtn}
       <button class="library-item-delete" data-id="${t.id}" title="Delete">×</button>
@@ -871,6 +918,49 @@ function renderLibrary() {
   });
 }
 
+function renderTopPlayed() {
+  if (!els.topPlayedList) return;
+  const played = savedTracks.filter(t => (t.play_count || 0) > 0);
+  const totalPlays = played.reduce((sum, t) => sum + (t.play_count || 0), 0);
+  els.topPlayedCount.textContent = totalPlays
+    ? `${totalPlays} play${totalPlays === 1 ? '' : 's'} · ${played.length} track${played.length === 1 ? '' : 's'}`
+    : '—';
+
+  if (!played.length) {
+    els.topPlayedList.innerHTML = '<p class="empty-hint">No plays yet. Press play on a library track to start counting.</p>';
+    return;
+  }
+
+  const top = [...played].sort((a, b) => (b.play_count || 0) - (a.play_count || 0)).slice(0, 10);
+  const max = top[0].play_count || 1;
+
+  els.topPlayedList.innerHTML = top.map((t, i) => {
+    const plays = t.play_count || 0;
+    const pct = Math.max(4, Math.round((plays / max) * 100));
+    const lastPlayed = t.last_played_at
+      ? `last ${formatDate(t.last_played_at)}`
+      : '';
+    return `
+    <div class="library-item" data-id="${t.id}">
+      <div class="library-item-info">
+        <p class="library-item-title">${i + 1}. ${escapeHtml(t.title || 'Untitled')}</p>
+        <p class="library-item-meta">${escapeHtml(t.style || '')} · ${plays} play${plays === 1 ? '' : 's'}${lastPlayed ? ' · ' + lastPlayed : ''}</p>
+        <div class="top-played-bar"><span style="width:${pct}%;"></span></div>
+      </div>
+    </div>
+  `;
+  }).join('');
+
+  // Click a top-played row → load that track into the player (same as library).
+  els.topPlayedList.querySelectorAll('.library-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const id = item.dataset.id;
+      const t = savedTracks.find(x => x.id === id);
+      if (t) playSavedTrack(t);
+    });
+  });
+}
+
 // Fetches a remote file and triggers a save dialog with the chosen filename.
 // Needed because the <a download> attribute is ignored for cross-origin URLs
 // (e.g. Supabase Storage), so the browser would otherwise just navigate to it.
@@ -902,6 +992,10 @@ function playSavedTrack(t) {
   }];
   // Restore the original Suno task ID so Save-as-Persona works for library tracks too.
   currentTaskId = t.suno_task_id || null;
+  // Mark this as the active library track so a 'play' event logs against it,
+  // and reset the once-per-load flag so a fresh click counts again.
+  activeLibraryTrackId = t.id;
+  playLoggedForCurrent = false;
   els.playerEmpty.classList.add('hidden');
   els.player.classList.remove('hidden');
   switchVersion(0);
