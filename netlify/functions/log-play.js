@@ -5,7 +5,8 @@
 // single PATCH. Good enough for a single-user app; if we ever go multi-user
 // we'd swap this for a proper Postgres function.
 
-const USER_EMAIL = 'wcannon83@gmail.com';
+// Track id is globally unique (uuid), so we no longer need to filter by user_email
+// or profile here — the id alone identifies the row.
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
@@ -26,7 +27,7 @@ exports.handler = async (event) => {
   try {
     // 1. Read the current count
     const readRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/js_tracks?id=eq.${encodeURIComponent(id)}&user_email=eq.${encodeURIComponent(USER_EMAIL)}&select=play_count`,
+      `${SUPABASE_URL}/rest/v1/js_tracks?id=eq.${encodeURIComponent(id)}&select=play_count`,
       { headers: baseHeaders }
     );
     if (!readRes.ok) {
@@ -40,7 +41,7 @@ exports.handler = async (event) => {
 
     // 2. Write count+1 with current timestamp
     const writeRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/js_tracks?id=eq.${encodeURIComponent(id)}&user_email=eq.${encodeURIComponent(USER_EMAIL)}`,
+      `${SUPABASE_URL}/rest/v1/js_tracks?id=eq.${encodeURIComponent(id)}`,
       {
         method: 'PATCH',
         headers: { ...baseHeaders, Prefer: 'return=representation' },

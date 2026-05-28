@@ -1,8 +1,8 @@
-// GET    /.netlify/functions/list-personas         → list saved personas (newest first)
-// DELETE /.netlify/functions/list-personas?id=…    → delete a saved persona
+// GET    /.netlify/functions/list-personas?profile=jimmy   → list saved personas for that profile
+// DELETE /.netlify/functions/list-personas?id=…             → delete a saved persona
 // Mirrors list-tracks.js. Uses Supabase REST directly.
 
-const USER_EMAIL = 'wcannon83@gmail.com';
+const DEFAULT_PROFILE = 'jimmy';
 
 exports.handler = async (event) => {
   const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -13,8 +13,9 @@ exports.handler = async (event) => {
   };
 
   if (event.httpMethod === 'GET') {
+    const profile = (event.queryStringParameters?.profile || DEFAULT_PROFILE).toLowerCase();
     try {
-      const url = `${SUPABASE_URL}/rest/v1/js_personas?user_email=eq.${encodeURIComponent(USER_EMAIL)}&order=created_at.desc&limit=200`;
+      const url = `${SUPABASE_URL}/rest/v1/js_personas?profile=eq.${encodeURIComponent(profile)}&order=created_at.desc&limit=200`;
       const res = await fetch(url, { headers: baseHeaders });
       if (!res.ok) {
         const t = await res.text();

@@ -1,9 +1,9 @@
-// GET  /.netlify/functions/list-tracks         → list saved tracks
-// DELETE /.netlify/functions/list-tracks?id=…  → delete a saved track (and its storage objects)
+// GET  /.netlify/functions/list-tracks?profile=jimmy   → list saved tracks for that profile
+// DELETE /.netlify/functions/list-tracks?id=…           → delete a saved track (and its storage objects)
 // Uses Supabase REST/Storage APIs directly via fetch — no dependencies.
 
 const BUCKET = 'jamsounds-audio';
-const USER_EMAIL = 'wcannon83@gmail.com';
+const DEFAULT_PROFILE = 'jimmy';
 
 exports.handler = async (event) => {
   const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -14,8 +14,9 @@ exports.handler = async (event) => {
   };
 
   if (event.httpMethod === 'GET') {
+    const profile = (event.queryStringParameters?.profile || DEFAULT_PROFILE).toLowerCase();
     try {
-      const url = `${SUPABASE_URL}/rest/v1/js_tracks?user_email=eq.${encodeURIComponent(USER_EMAIL)}&saved=eq.true&order=created_at.desc&limit=200`;
+      const url = `${SUPABASE_URL}/rest/v1/js_tracks?profile=eq.${encodeURIComponent(profile)}&saved=eq.true&order=created_at.desc&limit=200`;
       const res = await fetch(url, { headers: baseHeaders });
       if (!res.ok) {
         const t = await res.text();

@@ -2,8 +2,21 @@
 // All API calls go through /.netlify/functions/*
 
 const API = '/.netlify/functions';
+const PROFILE_KEY = 'jamsounds.activeProfile';
+const DEFAULT_PROFILE = 'jimmy';
+
+/** Returns the currently selected profile slug, e.g. 'jimmy' or 'courtney'. */
+function getProfile() {
+  return (localStorage.getItem(PROFILE_KEY) || DEFAULT_PROFILE).toLowerCase();
+}
+
+/** Sets the active profile. Caller is responsible for refreshing UI/state. */
+function setProfile(slug) {
+  localStorage.setItem(PROFILE_KEY, (slug || DEFAULT_PROFILE).toLowerCase());
+}
 
 const els = {
+  profileSelect: document.getElementById('profile-select'),
   projectBrief: document.getElementById('project-brief'),
   translateBtn: document.getElementById('translate-btn'),
   translateStatus: document.getElementById('translate-status'),
@@ -103,6 +116,13 @@ let playLoggedForCurrent = false; // ensures one log per track-load (no pause/re
 // ---------- Init ----------
 
 async function init() {
+  // Profile dropdown must populate before library/personas, so per-profile
+  // fetches use the right value on first paint.
+  await refreshProfiles();
+  if (els.profileSelect) {
+    els.profileSelect.addEventListener('change', handleProfileChange);
+  }
+
   await Promise.all([refreshCredits(), refreshLibrary(), refreshPersonas()]);
 
   els.translateBtn.addEventListener('click', handleTranslate);
@@ -164,6 +184,80 @@ async function init() {
 
   // Prefetch JamPlays albums in the background so the modal opens fast
   refreshJamplaysAlbums();
+}
+
+// ---------- Profiles ----------
+
+async function refreshProfiles() {
+  if (!els.profileSelect) return;
+  try {
+    const res = await fetch(`${API}/list-profiles`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'list-profiles failed');
+    const profiles = data.profiles || [];
+
+    const active = getProfile();
+    // Make sure the active slug is one of the known profiles; if not, fall back.
+    const known = new Set(profiles.map(p => p.name));
+    const finalActive = known.has(active) ? active : DEFAULT_PROFILE;
+    setProfile(finalActive);
+
+    const opts = profiles.map(p =>
+      `<option value="${p.name}">${escapeHtml(p.display_name || p.name)}</option>`
+    ).join('');
+    els.profileSelect.innerHTML = opts + `<option value="__new__">+ New profile…</option>`;
+    els.profileSelect.value = finalActive;
+  } catch (e) {
+    console.warn('refreshProfiles failed', e);
+  }
+}
+
+async function handleProfileChange(e) {
+  const picked = e.target.value;
+
+  if (picked === '__new__') {
+    const name = prompt('Name this profile (e.g. "Courtney"):');
+    if (!name || !name.trim()) {
+      // Cancelled — restore previous selection
+      e.target.value = getProfile();
+      return;
+    }
+    try {
+      const res = await fetch(`${API}/list-profiles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: name.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'create profile failed');
+      await refreshProfiles();
+      // Switch into the newly created profile
+      setProfile(data.profile.name);
+      els.profileSelect.value = data.profile.name;
+      await reloadProfileScopedData();
+    } catch (err) {
+      alert('Could not create profile: ' + err.message);
+      e.target.value = getProfile();
+    }
+    return;
+  }
+
+  setProfile(picked);
+  await reloadProfileScopedData();
+}
+
+/** Re-fetch everything that's scoped to a profile after a switch. */
+async function reloadProfileScopedData() {
+  // Clear the player + any stale state tied to the previous profile's library.
+  activeLibraryTrackId = null;
+  playLoggedForCurrent = false;
+  await Promise.all([refreshLibrary(), refreshPersonas()]);
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
 }
 
 async function logPlay(trackId) {
@@ -604,6 +698,7 @@ async function autosaveDuetTracks(tracks, taskId, payload, duetMeta) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          profile: getProfile(),
           suno_audio_id: track.id,
           suno_task_id: taskId,
           suno_audio_url: track.audio_url || track.stream_audio_url,
@@ -742,6 +837,7 @@ async function handleSave() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        profile: getProfile(),
         suno_audio_id: track.id,
         suno_task_id: currentTaskId,
         suno_audio_url: track.audio_url || track.stream_audio_url,
@@ -803,6 +899,7 @@ async function autosaveAll(tracks) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          profile: getProfile(),
           suno_audio_id: track.id,
           suno_task_id: currentTaskId,
           suno_audio_url: track.audio_url || track.stream_audio_url,
@@ -877,7 +974,7 @@ function updateSaveButtonForActive() {
 
 async function refreshLibrary() {
   try {
-    const res = await fetch(`${API}/list-tracks`);
+    const res = await fetch(`${API}/list-tracks?profile=${encodeURIComponent(getProfile())}`);
     const data = await res.json();
     savedTracks = data.tracks || [];
     renderLibrary();
@@ -1147,7 +1244,7 @@ function setStatus(el, msg, kind) {
 
 async function refreshPersonas() {
   try {
-    const res = await fetch(`${API}/list-personas`);
+    const res = await fetch(`${API}/list-personas?profile=${encodeURIComponent(getProfile())}`);
     const data = await res.json();
     savedPersonas = data.personas || [];
     renderPersonas();
@@ -1287,6 +1384,7 @@ async function handleSavePersona() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        profile: getProfile(),
         taskId: currentTaskId,
         audioId: track.id,
         name,

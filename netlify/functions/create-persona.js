@@ -1,10 +1,11 @@
 // POST /.netlify/functions/create-persona
-// Body: { taskId, audioId, name, description, vocalStart?, vocalEnd?, sourceTrackId? }
+// Body: { taskId, audioId, name, description, vocalStart?, vocalEnd?, sourceTrackId?, profile? }
 // 1. Calls sunoapi.org's /api/v1/generate/generate-persona to mint a Suno personaId.
 // 2. Persists the result in public.js_personas so the frontend can reuse it.
 // Returns: { persona: <row> }
 
 const USER_EMAIL = 'wcannon83@gmail.com';
+const DEFAULT_PROFILE = 'jimmy';
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
@@ -20,7 +21,9 @@ exports.handler = async (event) => {
     vocalStart,
     vocalEnd,
     sourceTrackId,
+    profile,
   } = body;
+  const profileName = (profile || DEFAULT_PROFILE).toLowerCase();
 
   if (!taskId || !audioId) return json(400, { error: 'taskId and audioId required' });
   if (!name) return json(400, { error: 'name required' });
@@ -81,6 +84,7 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         user_email: USER_EMAIL,
+        profile: profileName,
         persona_id: personaId,
         name,
         description,

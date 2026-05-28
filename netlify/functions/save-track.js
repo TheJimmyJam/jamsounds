@@ -7,7 +7,8 @@
 const NodeID3 = require('node-id3');
 
 const BUCKET = 'jamsounds-audio';
-const USER_EMAIL = 'wcannon83@gmail.com'; // single-user app for now
+const USER_EMAIL = 'wcannon83@gmail.com'; // billing/account level (account owner)
+const DEFAULT_PROFILE = 'jimmy';
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
@@ -29,7 +30,9 @@ exports.handler = async (event) => {
     tags,
     project_brief,
     music_brief,
+    profile,
   } = body;
+  const profileName = (profile || DEFAULT_PROFILE).toLowerCase();
 
   if (!suno_audio_url || !suno_audio_id) {
     return json(400, { error: 'suno_audio_url and suno_audio_id required' });
@@ -139,6 +142,7 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         user_email: USER_EMAIL,
+        profile: profileName,
         project_brief: project_brief || null,
         music_brief: music_brief || null,
         suno_task_id,

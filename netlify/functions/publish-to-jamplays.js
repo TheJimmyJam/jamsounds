@@ -17,7 +17,7 @@
 
 const NodeID3 = require('node-id3');
 
-const USER_EMAIL = 'wcannon83@gmail.com';
+// Track id is globally unique (uuid) — no need to scope by user_email or profile here.
 const GH_OWNER = 'TheJimmyJam';
 const GH_REPO = 'jamplays';
 const GH_BRANCH = 'main';
@@ -68,7 +68,7 @@ exports.handler = async (event) => {
   try {
     // 1. Look up the track row
     const lookupRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/js_tracks?id=eq.${encodeURIComponent(trackId)}&user_email=eq.${encodeURIComponent(USER_EMAIL)}&select=*`,
+      `${SUPABASE_URL}/rest/v1/js_tracks?id=eq.${encodeURIComponent(trackId)}&select=*`,
       { headers: sbHeaders }
     );
     if (!lookupRes.ok) throw new Error('track lookup failed');
