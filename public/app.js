@@ -908,6 +908,74 @@ function playSavedTrack(t) {
   // hide v2 since saved tracks are single
   document.querySelectorAll('.version-btn')[1].style.display = 'none';
   document.querySelectorAll('.version-btn')[0].textContent = 'saved';
+
+  // Repopulate the brief fields so the user can tweak and re-generate from the
+  // same starting point. Prefer the saved music_brief snapshot; fall back to
+  // the row's direct columns for tracks saved before music_brief existed.
+  repopulateFormFromTrack(t);
+}
+
+function repopulateFormFromTrack(t) {
+  const b = (t && t.music_brief) || {};
+  const setVal = (el, v) => { if (el && v != null && v !== '') el.value = v; };
+  const setNum = (el, v) => { if (el && v != null && !Number.isNaN(Number(v))) el.value = v; };
+
+  // Strip the duet name suffix (" — Jimmy") so the title is editable as-is.
+  let titleVal = b.title || t.title || '';
+  if (b.duet && b.duet.voice_name && titleVal.endsWith(` — ${b.duet.voice_name}`)) {
+    titleVal = titleVal.slice(0, -1 * (` — ${b.duet.voice_name}`.length));
+  }
+  setVal(els.title, titleVal);
+  setVal(els.model, b.model || t.model);
+  setVal(els.style, b.style || t.style);
+  setVal(els.prompt, b.prompt || t.prompt);
+  setVal(els.projectBrief, b.projectBrief || t.project_brief);
+
+  if (els.instrumental) {
+    const inst = b.instrumental != null ? b.instrumental : t.instrumental;
+    if (inst != null) els.instrumental.value = String(!!inst);
+  }
+  setVal(els.negativeTags, b.negativeTags);
+  if (els.vocalGender) els.vocalGender.value = b.vocalGender || '';
+
+  setNum(els.styleWeight, b.styleWeight);
+  setNum(els.weirdness, b.weirdnessConstraint);
+  setNum(els.audioWeight, b.audioWeight);
+
+  // Persona — only restore if it still exists in the saved list.
+  if (els.personaSelect) {
+    const personaStillExists = b.personaId && savedPersonas.some(p => p.persona_id === b.personaId);
+    els.personaSelect.value = personaStillExists ? b.personaId : '';
+  }
+
+  // Reference MP3: we can't re-upload the original file, so just clear any
+  // stale reference state and note it for the user.
+  if (referenceUploadUrl) clearReference();
+
+  // Duet mode: leave the checkbox off (each saved track is one stem). But if
+  // this row was part of a duet pair, restore that voice's gender/persona
+  // into the duet sub-fields so the user can flip duet mode back on with the
+  // original assignments still in place.
+  if (b.duet && els.duetGenderA) {
+    const role = b.duet.role; // 'a' or 'b'
+    const voiceName = b.duet.voice_name || '';
+    if (role === 'a') {
+      setVal(els.duetNameA, voiceName);
+      els.duetGenderA.value = b.vocalGender || '';
+      if (els.duetPersonaA) els.duetPersonaA.value = (b.personaId && savedPersonas.some(p => p.persona_id === b.personaId)) ? b.personaId : '';
+    } else if (role === 'b') {
+      setVal(els.duetNameB, voiceName);
+      els.duetGenderB.value = b.vocalGender || '';
+      if (els.duetPersonaB) els.duetPersonaB.value = (b.personaId && savedPersonas.some(p => p.persona_id === b.personaId)) ? b.personaId : '';
+    }
+  }
+
+  updateGenerateLabel();
+
+  const note = b.duet
+    ? `Loaded settings from "${t.title}" (duet · ${b.duet.voice_name || b.duet.role}). Tweak and Generate to recreate.`
+    : `Loaded settings from "${t.title}". Tweak anything and Generate to recreate.`;
+  setStatus(els.generateStatus, note, 'success');
 }
 
 function formatDate(iso) {
