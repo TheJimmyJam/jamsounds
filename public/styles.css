@@ -435,6 +435,51 @@ audio {
   white-space: nowrap;
 }
 
+/* Modal (publish flow) */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal.hidden { display: none; }
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+}
+.modal-card {
+  position: relative;
+  background: var(--surface, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  padding: 20px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-2, #aaa);
+  font-size: 22px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.modal-close:hover { color: var(--text, #fff); }
+
 .play-count-badge {
   display: inline-flex;
   align-items: center;

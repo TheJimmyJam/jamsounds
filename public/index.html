@@ -211,6 +211,7 @@
             <button class="version-btn" data-version="1">v2</button>
             <button id="save-btn" class="icon-btn" title="Save to library">♡</button>
             <button id="save-persona-btn" class="icon-btn" title="Save vocal as persona">👤</button>
+            <button id="publish-btn" class="icon-btn" title="Publish to JamPlays">🚀</button>
             <a id="download-link" class="icon-btn" title="Download" download>↓</a>
           </div>
 
@@ -277,6 +278,83 @@
       </div>
     </section>
   </main>
+
+  <!-- Publish to JamPlays modal -->
+  <div id="publish-modal" class="modal hidden">
+    <div class="modal-backdrop" data-publish-close></div>
+    <div class="modal-card">
+      <div class="modal-header">
+        <p class="section-label" style="margin:0;">Publish to JamPlays</p>
+        <button class="modal-close" data-publish-close>×</button>
+      </div>
+      <p class="hint" id="publish-source" style="margin: 4px 0 12px;">—</p>
+
+      <div class="field">
+        <label for="publish-album">Album</label>
+        <select id="publish-album"></select>
+      </div>
+
+      <div id="publish-new-album-fields" class="hidden" style="background:var(--surface-2);border-radius:var(--radius-sm);padding:10px;margin-bottom:8px;">
+        <div class="field">
+          <label for="publish-new-name">New album name</label>
+          <input id="publish-new-name" type="text" maxlength="80" placeholder="Fantasyland, Population 1" />
+          <p class="hint" id="publish-new-slug-preview" style="margin-top:4px;">URL: jamplays.netlify.app/—/</p>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="publish-new-year">Year</label>
+            <input id="publish-new-year" type="number" min="2020" max="2099" />
+          </div>
+          <div class="field">
+            <label for="publish-new-desc">Description <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— used in meta tags</span></label>
+            <input id="publish-new-desc" type="text" maxlength="200" placeholder="A new album by JamSounds." />
+          </div>
+        </div>
+      </div>
+
+      <div id="publish-position-row" class="grid-2">
+        <div class="field">
+          <label for="publish-position-mode">Position</label>
+          <select id="publish-position-mode">
+            <option value="append">Append (add to end)</option>
+            <option value="insert">Insert at position…</option>
+            <option value="replace">Replace existing track…</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="publish-position-n">Slot #</label>
+          <select id="publish-position-n" disabled></select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="publish-display-title">Display title</label>
+        <input id="publish-display-title" type="text" maxlength="80" />
+      </div>
+
+      <div class="field">
+        <label for="publish-track-type">Track type suffix <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— optional, appended to title</span></label>
+        <select id="publish-track-type">
+          <option value="">None</option>
+          <option value="(duet)">(duet)</option>
+          <option value="(instrumental)">(instrumental)</option>
+          <option value="(reprise)">(reprise)</option>
+          <option value="(interlude)">(interlude)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="publish-lyrics">Lyrics <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— shown in the player's lyrics panel; strip [Verse]/(Speaker) tags</span></label>
+        <textarea id="publish-lyrics" rows="8" placeholder="Lyrics for the JamPlays player..."></textarea>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button id="publish-submit" class="btn-primary" style="flex:1;">Publish to JamPlays</button>
+        <button class="btn-secondary" style="margin:0;" data-publish-close>Cancel</button>
+      </div>
+      <p id="publish-status" class="status-line"></p>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

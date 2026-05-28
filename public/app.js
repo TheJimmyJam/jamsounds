@@ -67,7 +67,26 @@ const els = {
   personaFormSave: document.getElementById('persona-form-save'),
   personaFormCancel: document.getElementById('persona-form-cancel'),
   personaFormStatus: document.getElementById('persona-form-status'),
+  publishBtn: document.getElementById('publish-btn'),
+  publishModal: document.getElementById('publish-modal'),
+  publishSource: document.getElementById('publish-source'),
+  publishAlbum: document.getElementById('publish-album'),
+  publishNewAlbumFields: document.getElementById('publish-new-album-fields'),
+  publishNewName: document.getElementById('publish-new-name'),
+  publishNewSlugPreview: document.getElementById('publish-new-slug-preview'),
+  publishNewYear: document.getElementById('publish-new-year'),
+  publishNewDesc: document.getElementById('publish-new-desc'),
+  publishPositionMode: document.getElementById('publish-position-mode'),
+  publishPositionN: document.getElementById('publish-position-n'),
+  publishDisplayTitle: document.getElementById('publish-display-title'),
+  publishTrackType: document.getElementById('publish-track-type'),
+  publishLyrics: document.getElementById('publish-lyrics'),
+  publishSubmit: document.getElementById('publish-submit'),
+  publishStatus: document.getElementById('publish-status'),
 };
+
+let jamplaysAlbums = []; // cached from list-jamplays-albums
+let publishContextTrack = null; // the saved-library row currently being published
 
 let currentResults = null; // [{audio_url, image_url, title, duration, ...}, {...}]
 let currentTaskId = null;
@@ -131,6 +150,20 @@ async function init() {
       logPlay(activeLibraryTrackId);
     });
   }
+
+  // Publish-to-JamPlays handlers
+  if (els.publishBtn) els.publishBtn.addEventListener('click', openPublishModalFromPlayer);
+  document.querySelectorAll('[data-publish-close]').forEach(el => el.addEventListener('click', closePublishModal));
+  if (els.publishAlbum) els.publishAlbum.addEventListener('change', onPublishAlbumChange);
+  if (els.publishPositionMode) els.publishPositionMode.addEventListener('change', updatePositionUI);
+  if (els.publishNewName) els.publishNewName.addEventListener('input', () => {
+    const slug = slugifyClient(els.publishNewName.value);
+    els.publishNewSlugPreview.textContent = `URL: jamplays.netlify.app/${slug || '—'}/`;
+  });
+  if (els.publishSubmit) els.publishSubmit.addEventListener('click', handlePublishSubmit);
+
+  // Prefetch JamPlays albums in the background so the modal opens fast
+  refreshJamplaysAlbums();
 }
 
 async function logPlay(trackId) {
@@ -1267,6 +1300,214 @@ async function handleSavePersona() {
 
 function escapeAttr(s) {
   return escapeHtml(s);
+}
+
+// ---------- Publish to JamPlays ----------
+
+function slugifyClient(s) {
+  return (s || '').toLowerCase()
+    .replace(/['"’"]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
+async function refreshJamplaysAlbums() {
+  try {
+    const res = await fetch(`${API}/list-jamplays-albums`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'fetch failed');
+    jamplaysAlbums = data.albums || [];
+  } catch (e) {
+    console.warn('jamplays albums fetch failed', e);
+    jamplaysAlbums = [];
+  }
+}
+
+function openPublishModalFromPlayer() {
+  // Only saved library tracks can be published (need the row id)
+  if (!activeLibraryTrackId) {
+    alert('Save this track to your library first, then publish.');
+    return;
+  }
+  const t = savedTracks.find(x => x.id === activeLibraryTrackId);
+  if (!t) return;
+  openPublishModal(t);
+}
+
+async function openPublishModal(track) {
+  publishContextTrack = track;
+  els.publishModal.classList.remove('hidden');
+  els.publishSource.textContent = `Publishing: "${track.title}" · ${track.style || ''}`;
+  els.publishDisplayTitle.value = track.title || '';
+  els.publishTrackType.value = guessTrackType(track);
+  els.publishLyrics.value = cleanupLyrics(track.music_brief?.prompt || track.prompt || '');
+  els.publishNewYear.value = new Date().getFullYear();
+  els.publishNewName.value = '';
+  els.publishNewSlugPreview.textContent = 'URL: jamplays.netlify.app/—/';
+  els.publishNewDesc.value = '';
+  setStatus(els.publishStatus, '', '');
+
+  // Refresh albums if we don't have them cached
+  if (!jamplaysAlbums.length) {
+    setStatus(els.publishStatus, 'Loading JamPlays albums...', '');
+    await refreshJamplaysAlbums();
+    setStatus(els.publishStatus, '', '');
+  }
+  renderAlbumDropdown();
+  onPublishAlbumChange();
+}
+
+function closePublishModal() {
+  els.publishModal.classList.add('hidden');
+  publishContextTrack = null;
+}
+
+function renderAlbumDropdown() {
+  const opts = jamplaysAlbums.map(a =>
+    `<option value="${escapeAttr(a.slug)}">${escapeHtml(a.name)} (${a.trackCount} song${a.trackCount === 1 ? '' : 's'})</option>`
+  ).join('');
+  els.publishAlbum.innerHTML = opts + '<option value="__new__">+ Create new album…</option>';
+}
+
+function onPublishAlbumChange() {
+  const isNew = els.publishAlbum.value === '__new__';
+  els.publishNewAlbumFields.classList.toggle('hidden', !isNew);
+
+  // For new albums, position is always "append" to the empty album
+  if (isNew) {
+    els.publishPositionMode.value = 'append';
+    els.publishPositionMode.disabled = true;
+    els.publishPositionN.disabled = true;
+    els.publishPositionN.innerHTML = '<option>—</option>';
+  } else {
+    els.publishPositionMode.disabled = false;
+  }
+  updatePositionUI();
+}
+
+function updatePositionUI() {
+  const isNew = els.publishAlbum.value === '__new__';
+  const mode = els.publishPositionMode.value;
+  const album = jamplaysAlbums.find(a => a.slug === els.publishAlbum.value);
+  const tracks = album?.tracks || [];
+
+  if (isNew || mode === 'append') {
+    els.publishPositionN.disabled = true;
+    els.publishPositionN.innerHTML = isNew
+      ? '<option>—</option>'
+      : `<option>${tracks.length + 1}</option>`;
+    return;
+  }
+
+  els.publishPositionN.disabled = false;
+  if (mode === 'insert') {
+    // Can insert at any slot from 1 to count+1
+    let html = '';
+    for (let i = 1; i <= tracks.length + 1; i++) {
+      const labelTrack = i <= tracks.length ? tracks[i - 1] : null;
+      const label = labelTrack
+        ? `${i} (before "${labelTrack.title}")`
+        : `${i} (at end)`;
+      html += `<option value="${i}">${escapeHtml(label)}</option>`;
+    }
+    els.publishPositionN.innerHTML = html;
+  } else if (mode === 'replace') {
+    if (!tracks.length) {
+      els.publishPositionN.innerHTML = '<option>—</option>';
+      els.publishPositionN.disabled = true;
+      return;
+    }
+    els.publishPositionN.innerHTML = tracks.map((t, i) =>
+      `<option value="${i + 1}">${i + 1}. ${escapeHtml(t.title)}</option>`
+    ).join('');
+  }
+}
+
+function guessTrackType(t) {
+  const brief = t.music_brief || {};
+  if (brief.duet) return '(duet)';
+  if (brief.instrumental || t.instrumental) return '(instrumental)';
+  const title = (t.title || '').toLowerCase();
+  if (title.includes('(duet)')) return '(duet)';
+  if (title.includes('(instrumental)')) return '(instrumental)';
+  return '';
+}
+
+function cleanupLyrics(raw) {
+  if (!raw) return '';
+  // Strip [Section] headers and (Speaker) prefixes that Suno used but JamPlays
+  // shouldn't display. Keep the actual lyric lines.
+  return raw.split('\n').map(line => {
+    let l = line.trim();
+    if (!l) return '';
+    if (/^\[[^\]]+\]$/.test(l)) return ''; // section headers like [Verse 1]
+    l = l.replace(/^\([^)]+\)\s*/, ''); // leading (Speaker)
+    return l;
+  }).filter((l, i, arr) => !(l === '' && arr[i - 1] === '')).join('\n').trim();
+}
+
+async function handlePublishSubmit() {
+  if (!publishContextTrack) return;
+  const isNew = els.publishAlbum.value === '__new__';
+  const displayTitle = els.publishDisplayTitle.value.trim();
+  if (!displayTitle) {
+    setStatus(els.publishStatus, 'Display title required.', 'error');
+    return;
+  }
+
+  const payload = {
+    trackId: publishContextTrack.id,
+    displayTitle,
+    trackType: els.publishTrackType.value || '',
+    lyrics: els.publishLyrics.value,
+    position: { mode: els.publishPositionMode.value },
+  };
+  if (payload.position.mode !== 'append') {
+    payload.position.n = parseInt(els.publishPositionN.value, 10);
+    if (!payload.position.n) {
+      setStatus(els.publishStatus, 'Pick a position.', 'error');
+      return;
+    }
+  }
+  if (isNew) {
+    const name = els.publishNewName.value.trim();
+    if (!name) {
+      setStatus(els.publishStatus, 'New album name required.', 'error');
+      return;
+    }
+    payload.newAlbum = {
+      name,
+      year: parseInt(els.publishNewYear.value, 10) || new Date().getFullYear(),
+      description: els.publishNewDesc.value.trim() || `A new album by JamSounds.`,
+    };
+  } else {
+    payload.albumSlug = els.publishAlbum.value;
+  }
+
+  els.publishSubmit.disabled = true;
+  setStatus(els.publishStatus, 'Publishing — this can take 30-60 seconds...', '');
+
+  try {
+    const res = await fetch(`${API}/publish-to-jamplays`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Publish failed');
+    setStatus(
+      els.publishStatus,
+      `Published! ${data.url} (commit ${data.commit}). Netlify is deploying — refresh JamPlays in a minute.`,
+      'success'
+    );
+    // Refresh cached albums so the next publish sees the updated tracklist
+    refreshJamplaysAlbums();
+  } catch (e) {
+    setStatus(els.publishStatus, `Error: ${e.message}`, 'error');
+  } finally {
+    els.publishSubmit.disabled = false;
+  }
 }
 
 init();
