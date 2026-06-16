@@ -1,10 +1,8 @@
 // POST /.netlify/functions/save-track
-// Downloads the Suno MP3 (and cover image), embeds the cover into the MP3's
-// ID3v2 tags so it travels with the file (Apple Music, Spotify, Files, VLC
-// etc. all show it when playing). Then uploads the tagged MP3 + the image
-// separately to Supabase Storage, and inserts a row in js_tracks.
-
-const NodeID3 = require('node-id3');
+// Downloads the Suno MP3 (and cover image), uploads both to Supabase Storage,
+// and inserts a row in js_tracks.
+// NOTE: ID3v2 cover-art embedding was removed — NodeID3.write() was producing
+// corrupted buffers, making saved files unplayable.
 
 const BUCKET = 'jamsounds-audio';
 const USER_EMAIL = 'wcannon83@gmail.com'; // billing/account level (account owner)
@@ -65,29 +63,7 @@ exports.handler = async (event) => {
       }
     }
 
-    // 3. Embed ID3v2 tags (title, artist, album, cover art) into the MP3 buffer
-    //    so the cover travels with the file when downloaded/texted.
-    try {
-      const tags = {
-        title: title || 'Untitled',
-        artist: 'JamSounds',
-        album: title || 'JamSounds',
-      };
-      if (imgBuffer) {
-        tags.image = {
-          mime: imgMime,
-          type: { id: 3, name: 'front cover' },
-          description: 'Cover (front)',
-          imageBuffer: imgBuffer,
-        };
-      }
-      const tagged = NodeID3.write(tags, audioBuffer);
-      if (Buffer.isBuffer(tagged)) audioBuffer = tagged;
-    } catch (e) {
-      console.warn('ID3 embed failed, uploading untagged audio:', e.message);
-    }
-
-    // 4. Upload audio (now with cover embedded) to Supabase Storage
+    // 3. Upload audio to Supabase Storage
     const audioPath = `audio/${suno_audio_id}.mp3`;
     const upRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${audioPath}`, {
       method: 'POST',
