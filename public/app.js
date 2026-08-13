@@ -4,6 +4,11 @@
 const API = '/.netlify/functions';
 const PROFILE_KEY = 'jamsounds.activeProfile';
 const DEFAULT_PROFILE = 'jimmy';
+// An in-flight generation is written here the instant Suno hands back a taskId,
+// so a reload / crash / misclick can never orphan a paid generation. Cleared
+// once every version of that task is safely in the library.
+const PENDING_KEY = 'jamsounds.pendingGeneration';
+const PENDING_MAX_AGE_MS = 2 * 60 * 60 * 1000; // Suno tasks expire long before this
 
 /** Returns the currently selected profile slug, e.g. 'jimmy' or 'courtney'. */
 function getProfile() {
@@ -13,6 +18,43 @@ function getProfile() {
 /** Sets the active profile. Caller is responsible for refreshing UI/state. */
 function setProfile(slug) {
   localStorage.setItem(PROFILE_KEY, (slug || DEFAULT_PROFILE).toLowerCase());
+}
+
+// ---------- Pending-generation persistence ----------
+// Credits are spent the moment Suno accepts the request. From that instant the
+// taskId is the only handle on the result — sunoapi.org has no endpoint that
+// lists your generations, so a lost taskId is a lost song. Persist immediately.
+
+function persistPending(p) {
+  try { localStorage.setItem(PENDING_KEY, JSON.stringify(p)); } catch (e) { /* quota / private mode — non-fatal */ }
+}
+
+function readPending() {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+/** Clears the pending record, but only if it belongs to `taskId` (omit to force). */
+function clearPending(taskId) {
+  const p = readPending();
+  if (!taskId || !p || p.taskId === taskId) {
+    try { localStorage.removeItem(PENDING_KEY); } catch (e) { /* non-fatal */ }
+  }
+  if (pendingGeneration && (!taskId || pendingGeneration.taskId === taskId)) pendingGeneration = null;
+}
+
+/** The snapshot for `taskId`, or null if we don't have one (e.g. an old session). */
+function snapshotFor(taskId) {
+  if (pendingGeneration && pendingGeneration.taskId === taskId) return pendingGeneration.payload || null;
+  const p = readPending();
+  return (p && p.taskId === taskId && p.payload) ? p.payload : null;
+}
+
+/** True while a generation is running or its results are still being saved. */
+function generationInFlight() {
+  return !!(activeGenerationTaskId && (pollingTimer || autosaveRunning));
 }
 
 const els = {
@@ -120,7 +162,18 @@ let jamplaysAlbums = []; // cached from list-jamplays-albums
 let publishContextTrack = null; // the saved-library row currently being published
 
 let currentResults = null; // [{audio_url, image_url, title, duration, ...}, {...}]
+// currentTaskId = the task backing whatever is in the PLAYER right now. It changes
+// when you open a saved library track, so it must never be used to decide whether a
+// generation is still ours to poll or to save.
 let currentTaskId = null;
+// activeGenerationTaskId = the task actually generating on Suno's side. Only a NEW
+// generation supersedes it. Keeping these separate is what stops a library click
+// from silently killing an in-flight poll.
+let activeGenerationTaskId = null;
+// Exact payload sent to Suno for the in-flight task, captured at request time.
+// Saves read from this, never from the live form — the form can be overwritten
+// (by a library click, an edit, a reload) between Generate and save.
+let pendingGeneration = null; // { taskId, payload, startedAt, profile }
 let activeVersion = 0;
 let pollingTimer = null;
 let savedTracks = [];
@@ -223,6 +276,10 @@ async function init() {
 
   // Prefetch JamPlays albums in the background so the modal opens fast
   refreshJamplaysAlbums();
+
+  // Last, once the UI is wired: reclaim any generation that was in flight when
+  // this page last closed. Not awaited — recovery shouldn't block first paint.
+  resumePendingGeneration();
 }
 
 // ---------- Profiles ----------
@@ -484,6 +541,17 @@ async function handleGenerate() {
     return;
   }
 
+  // Starting a second generation is the one action that genuinely abandons the
+  // first — only one task can be tracked at a time, and its taskId is dropped.
+  if (generationInFlight()) {
+    const running = (pendingGeneration && pendingGeneration.payload && pendingGeneration.payload.title) || 'A track';
+    if (!confirm(
+      `"${running}" is still generating.\n\n` +
+      `Starting a new generation abandons it — those credits are already spent and it can't be recovered.\n\n` +
+      `Start anyway?`
+    )) return;
+  }
+
   els.generateBtn.disabled = true;
   setStatus(els.generateStatus, 'Submitting to Suno...', '');
   // Clear any stale state from a previous generation so a leftover poll
@@ -491,6 +559,8 @@ async function handleGenerate() {
   if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
   currentResults = null;
   currentTaskId = null;
+  activeGenerationTaskId = null;
+  clearPending();
   activeLibraryTrackId = null;
   playLoggedForCurrent = false;
   autosavedIds = new Set();
@@ -506,6 +576,17 @@ async function handleGenerate() {
     if (!data.taskId) throw new Error('Suno did not return a taskId');
 
     currentTaskId = data.taskId;
+    activeGenerationTaskId = data.taskId;
+    // Snapshot + persist BEFORE the first poll. Credits are already spent; from
+    // here on the task survives a reload, a misclick, or a closed tab.
+    pendingGeneration = {
+      taskId: data.taskId,
+      payload,
+      startedAt: Date.now(),
+      profile: getProfile(),
+    };
+    persistPending(pendingGeneration);
+
     setStatus(els.generateStatus, 'Task started. Polling for results...', '');
     pollForResults();
   } catch (e) {
@@ -669,6 +750,11 @@ async function handleGenerateDuet() {
   if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
   currentResults = null;
   currentTaskId = null;
+  // Duet runs its own poller (pollDuetTask) and already carries its payload and
+  // taskId through to autosave, so it needs no pending record — but it must not
+  // leave a stale single-track one behind either.
+  activeGenerationTaskId = null;
+  clearPending();
   activeLibraryTrackId = null;
   playLoggedForCurrent = false;
   autosavedIds = new Set();
@@ -809,33 +895,93 @@ async function autosaveDuetTracks(tracks, taskId, payload, duetMeta) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// ---------- Recovery ----------
+
+/**
+ * Runs on load. If a generation was in flight when the page last went away
+ * (reload, crash, closed tab), pick it back up: finished ones get saved,
+ * running ones get re-polled. Without this, the taskId is gone and so is the
+ * song — sunoapi.org has no way to list past generations.
+ */
+async function resumePendingGeneration() {
+  const p = readPending();
+  if (!p || !p.taskId) return;
+
+  if (Date.now() - (p.startedAt || 0) > PENDING_MAX_AGE_MS) { clearPending(p.taskId); return; }
+  // Belongs to a different profile's session — leave it for them to recover.
+  if (p.profile && p.profile !== getProfile()) return;
+
+  pendingGeneration = p;
+  const name = (p.payload && p.payload.title) || 'a track';
+  setStatus(els.generateStatus, `Found an unfinished generation ("${name}") — checking Suno...`, '');
+
+  try {
+    const res = await fetch(`${API}/check-status?taskId=${encodeURIComponent(p.taskId)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `check-status failed (${res.status})`);
+
+    if (data.status === 'complete') {
+      currentTaskId = p.taskId;
+      activeGenerationTaskId = p.taskId;
+      currentResults = data.tracks;
+      autosavedIds = new Set();
+      showResults();
+      await autosaveAll(data.tracks, p.taskId);
+      refreshCredits();
+    } else if (data.status === 'pending' || data.status === 'streaming') {
+      currentTaskId = p.taskId;
+      activeGenerationTaskId = p.taskId;
+      autosavedIds = new Set();
+      els.generateBtn.disabled = true;
+      setStatus(els.generateStatus, `"${name}" is still generating — reconnected, polling...`, '');
+      pollForResults();
+    } else {
+      setStatus(
+        els.generateStatus,
+        `Previous generation "${name}" failed on Suno's side${data.message ? `: ${data.message}` : '.'}`,
+        'error'
+      );
+      clearPending(p.taskId);
+    }
+  } catch (e) {
+    // Keep the record — a transient network blip must not throw away the taskId.
+    setStatus(els.generateStatus, `Couldn't recover "${name}" (${e.message}). Reload to try again.`, 'error');
+  }
+}
+
 function pollForResults() {
   if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
   let attempts = 0;
   const maxAttempts = 60; // 5 minutes at 5s interval
-  // Capture the task ID this poller belongs to. If currentTaskId changes
-  // (user kicked off a new generation), this poller exits silently — it
-  // must NOT autosave the old task's tracks under the new task's context.
-  const myTaskId = currentTaskId;
+  // Capture the task ID this poller belongs to. ONLY a newer generation
+  // supersedes it — opening a saved library track moves currentTaskId but must
+  // leave this poll running, or a paid generation dies with no way to find it.
+  const myTaskId = activeGenerationTaskId;
 
   const poll = async () => {
     attempts++;
-    if (currentTaskId !== myTaskId) return; // superseded by a newer generation
+    if (activeGenerationTaskId !== myTaskId) return; // superseded by a newer generation
     try {
-      const res = await fetch(`${API}/check-status?taskId=${myTaskId}`);
+      const res = await fetch(`${API}/check-status?taskId=${encodeURIComponent(myTaskId)}`);
       const data = await res.json();
-      if (currentTaskId !== myTaskId) return; // changed while we were awaiting
+      if (activeGenerationTaskId !== myTaskId) return; // changed while we were awaiting
+
+      // If the user has since opened a library track, the player belongs to them.
+      // Keep saving in the background, but don't yank what they're listening to.
+      const focused = currentTaskId === myTaskId;
 
       if (data.status === 'streaming' || data.status === 'complete') {
         // We have at least streaming URLs
-        currentResults = data.tracks;
-        showResults();
+        if (focused) {
+          currentResults = data.tracks;
+          showResults();
+        }
         if (data.status === 'complete') {
           setStatus(els.generateStatus, `Done. Saving ${data.tracks.length} tracks to library...`, '');
           els.generateBtn.disabled = false;
           refreshCredits();
           pollingTimer = null;
-          await autosaveAll(data.tracks);
+          await autosaveAll(data.tracks, myTaskId);
           return;
         } else {
           setStatus(els.generateStatus, 'Streaming ready. Final files baking...', '');
@@ -849,7 +995,9 @@ function pollForResults() {
       if (attempts < maxAttempts) {
         pollingTimer = setTimeout(poll, 5000);
       } else {
-        setStatus(els.generateStatus, 'Timed out waiting. Refresh to retry.', 'error');
+        // Deliberately does NOT clear the pending record — the task may still
+        // finish on Suno's side, and a reload will pick it back up.
+        setStatus(els.generateStatus, 'Timed out waiting. Reload the page — the track will be recovered if Suno finishes it.', 'error');
         els.generateBtn.disabled = false;
         pollingTimer = null;
       }
@@ -868,6 +1016,13 @@ function pollForResults() {
 function showResults() {
   els.playerEmpty.classList.add('hidden');
   els.player.classList.remove('hidden');
+  // playSavedTrack collapses the picker to a single "saved" button. A fresh
+  // generation has two versions, so put it back before switching.
+  const btns = document.querySelectorAll('.version-btn');
+  btns.forEach((btn, i) => {
+    btn.style.display = (currentResults && currentResults.length > i) ? '' : 'none';
+    btn.textContent = `v${i + 1}`;
+  });
   switchVersion(0);
 }
 
@@ -920,6 +1075,10 @@ async function handleSave() {
   els.saveBtn.disabled = true;
   els.saveBtn.textContent = '...';
 
+  // Same rule as autosave: the parameters this track was generated with beat
+  // whatever happens to be in the form when the button is pressed.
+  const brief = snapshotFor(currentTaskId) || collectPayload();
+
   try {
     const res = await fetch(`${API}/save-track`, {
       method: 'POST',
@@ -929,16 +1088,16 @@ async function handleSave() {
         suno_audio_id: track.id,
         suno_task_id: currentTaskId,
         suno_audio_url: track.audio_url || track.stream_audio_url,
-        title: els.title.value.trim() || track.title,
-        style: els.style.value.trim(),
-        prompt: els.prompt.value.trim(),
-        model: track.model_name || els.model.value,
-        instrumental: els.instrumental.value === 'true',
+        title: brief.title || track.title,
+        style: brief.style || '',
+        prompt: brief.prompt || '',
+        model: track.model_name || brief.model || els.model.value,
+        instrumental: !!brief.instrumental,
         duration: track.duration,
         image_url: track.image_url,
         tags: track.tags,
-        project_brief: els.projectBrief.value.trim(),
-        music_brief: collectPayload(),
+        project_brief: brief.projectBrief || '',
+        music_brief: brief,
       }),
     });
     const data = await res.json();
@@ -965,16 +1124,20 @@ async function handleSave() {
 
 // ---------- Autosave (both versions, on generation complete) ----------
 
-async function autosaveAll(tracks) {
+async function autosaveAll(tracks, taskId) {
   if (autosaveRunning) return;
   autosaveRunning = true;
 
-  const briefSnapshot = collectPayload();
-  const projectBrief = els.projectBrief.value.trim();
-  const styleVal = els.style.value.trim();
-  const promptVal = els.prompt.value.trim();
-  const instrumentalVal = els.instrumental.value === 'true';
-  const titleVal = els.title.value.trim();
+  const saveTaskId = taskId || activeGenerationTaskId || currentTaskId;
+  // Prefer the payload captured when this task was submitted. Reading the live
+  // form here is what wrote empty style/prompt onto "6-Icy" — by the time the
+  // save fired, a library click had already replaced the form contents.
+  const briefSnapshot = snapshotFor(saveTaskId) || collectPayload();
+  const projectBrief = briefSnapshot.projectBrief || '';
+  const styleVal = briefSnapshot.style || '';
+  const promptVal = briefSnapshot.prompt || '';
+  const instrumentalVal = !!briefSnapshot.instrumental;
+  const titleVal = briefSnapshot.title || '';
 
   const toSave = tracks.filter(t => t && t.id && !autosavedIds.has(t.id));
   let okCount = 0;
@@ -989,12 +1152,12 @@ async function autosaveAll(tracks) {
         body: JSON.stringify({
           profile: getProfile(),
           suno_audio_id: track.id,
-          suno_task_id: currentTaskId,
+          suno_task_id: saveTaskId,
           suno_audio_url: track.audio_url || track.stream_audio_url,
           title: titleVal || track.title,
           style: styleVal,
           prompt: promptVal,
-          model: track.model_name || els.model.value,
+          model: track.model_name || briefSnapshot.model || els.model.value,
           instrumental: instrumentalVal,
           duration: track.duration,
           image_url: track.image_url,
@@ -1020,14 +1183,24 @@ async function autosaveAll(tracks) {
   }));
 
   await refreshLibrary();
-  updateSaveButtonForActive();
+  if (currentTaskId === saveTaskId) updateSaveButtonForActive();
 
+  const name = titleVal || (tracks[0] && tracks[0].title) || 'Track';
   if (failures.length === 0) {
-    setStatus(els.generateStatus, `Done. ${okCount} tracks saved to library.`, 'success');
-  } else {
+    // Every version is on disk — the taskId is no longer load-bearing.
+    clearPending(saveTaskId);
     setStatus(
       els.generateStatus,
-      `Saved ${okCount}/${tracks.length}. ${failures.length} failed — try the ♡ button to retry.`,
+      currentTaskId === saveTaskId
+        ? `Done. ${okCount} tracks saved to library.`
+        : `"${name}" finished while you were elsewhere — ${okCount} tracks saved to your library.`,
+      'success'
+    );
+  } else {
+    // Keep the pending record so a reload can retry the ones that failed.
+    setStatus(
+      els.generateStatus,
+      `Saved ${okCount}/${tracks.length}. ${failures.length} failed — reload to retry, or use the ♡ button.`,
       'error'
     );
   }
@@ -1218,6 +1391,20 @@ async function downloadFromUrl(url, filename) {
 }
 
 function playSavedTrack(t) {
+  // Opening a saved track replaces the form and the player. That is no longer
+  // destructive to an in-flight generation (it keeps polling and autosaving on
+  // its own taskId), but it does hide the progress — so say so first.
+  if (generationInFlight()) {
+    const name = (pendingGeneration && pendingGeneration.payload && pendingGeneration.payload.title) || 'A track';
+    const ok = confirm(
+      `"${name}" is still generating.\n\n` +
+      `Opening "${t.title || 'this track'}" will replace the form and player. ` +
+      `The generation keeps running in the background and will still be saved to your library — ` +
+      `you just won't see its progress.\n\nOpen anyway?`
+    );
+    if (!ok) return;
+  }
+
   currentResults = [{
     id: t.suno_audio_id,
     title: t.title,
@@ -1610,6 +1797,7 @@ async function handleAddVocals() {
     styleWeight: parseFloat(els.styleWeight.value) || null,
     weirdnessConstraint: parseFloat(els.weirdness.value) || null,
     audioWeight: parseFloat(els.audioWeightSlider.value),
+    instrumental: false,
   }, 'Adding vocals');
 }
 
@@ -1628,6 +1816,7 @@ async function handleAddInstrumental() {
     styleWeight: parseFloat(els.styleWeight.value) || null,
     weirdnessConstraint: parseFloat(els.weirdness.value) || null,
     audioWeight: parseFloat(els.audioWeightSlider.value),
+    instrumental: true,
   }, 'Building instrumental');
 }
 
@@ -1638,6 +1827,8 @@ async function runReferenceJob(fn, payload, label) {
   if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
   currentResults = null;
   currentTaskId = null;
+  activeGenerationTaskId = null;
+  clearPending();
   activeLibraryTrackId = null;
   playLoggedForCurrent = false;
   autosavedIds = new Set();
@@ -1653,6 +1844,9 @@ async function runReferenceJob(fn, payload, label) {
     if (!data.taskId) throw new Error('Suno did not return a taskId');
 
     currentTaskId = data.taskId;
+    activeGenerationTaskId = data.taskId;
+    pendingGeneration = { taskId: data.taskId, payload, startedAt: Date.now(), profile: getProfile() };
+    persistPending(pendingGeneration);
     setStatus(els.refStatus, '', '');
     setStatus(els.generateStatus, `${label} — polling for results...`, '');
     pollForResults();
@@ -1700,6 +1894,16 @@ async function handleExtend() {
     if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
     currentResults = null;
     currentTaskId = data.taskId;
+    activeGenerationTaskId = data.taskId;
+    // extend-music takes only audioId/model, so snapshot the form as it stands
+    // now — still far better than reading it again minutes later at save time.
+    pendingGeneration = {
+      taskId: data.taskId,
+      payload: { ...collectPayload(), title: `${els.title.value.trim() || track.title || 'Untitled'} (extended)` },
+      startedAt: Date.now(),
+      profile: getProfile(),
+    };
+    persistPending(pendingGeneration);
     autosavedIds = new Set();
     setStatus(els.trackToolsStatus, '', '');
     setStatus(els.generateStatus, 'Extending — polling for results...', '');
