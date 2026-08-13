@@ -60,9 +60,22 @@
         </div>
       </div>
 
-      <div class="field">
-        <label for="style">Style</label>
-        <input id="style" type="text" maxlength="1000" placeholder="ambient electronic, lo-fi, warm pads, 80 BPM" />
+      <div class="field" id="duration-field">
+        <label for="duration">Length <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— V5_5 only. Unchecked = let Suno decide.</span></label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="duration-enabled" type="checkbox" style="margin:0;width:auto;" />
+          <input id="duration" type="range" min="10" max="360" step="5" value="180" style="flex:1;" disabled />
+          <span id="duration-out" style="font-size:11px;min-width:44px;text-align:right;">3:00</span>
+        </div>
+        <p id="duration-note" class="hint" style="margin-top:4px;font-weight:400;text-transform:none;letter-spacing:0;"></p>
+      </div>
+
+      <div class="field" style="display:flex;gap:6px;align-items:flex-end;">
+        <div style="flex:1;">
+          <label for="style">Style</label>
+          <input id="style" type="text" maxlength="1000" placeholder="ambient electronic, lo-fi, warm pads, 80 BPM" />
+        </div>
+        <button id="boost-style-btn" class="btn-secondary" style="margin-top:0;height:32px;white-space:nowrap;" title="Expand a terse style line into a fuller one">Boost</button>
       </div>
 
       <div class="field" style="display:flex;gap:6px;align-items:flex-end;">
@@ -88,6 +101,10 @@
             <input id="audio-weight-slider" type="range" min="0" max="1" step="0.05" value="0.65" style="flex:1;" />
             <span id="audio-weight-out" style="font-size:11px;min-width:30px;">0.65</span>
             <button id="ref-clear" class="btn-secondary" style="margin:0;padding:4px 10px;font-size:11px;">Clear</button>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px;">
+            <button id="add-vocals-btn" class="btn-secondary" style="margin:0;flex:1;padding:4px 10px;font-size:11px;" title="Sing the lyrics above over this uploaded instrumental">Add vocals to this</button>
+            <button id="add-instrumental-btn" class="btn-secondary" style="margin:0;flex:1;padding:4px 10px;font-size:11px;" title="Build an arrangement under this uploaded vocal">Add instrumental to this</button>
           </div>
         </div>
         <p id="ref-status" class="status-line"></p>
@@ -186,10 +203,11 @@
             </select>
           </div>
           <div class="field">
-            <label for="persona-select">Persona <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— reuse a saved voice</span></label>
+            <label for="persona-select">Persona / Voice <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— reuse a saved voice</span></label>
             <select id="persona-select">
               <option value="">None</option>
             </select>
+            <p id="persona-mode-note" class="hint" style="margin-top:4px;font-weight:400;text-transform:none;letter-spacing:0;"></p>
           </div>
         </div>
       </details>
@@ -218,8 +236,14 @@
             <button id="save-btn" class="icon-btn" title="Save to library">♡</button>
             <button id="save-persona-btn" class="icon-btn" title="Save vocal as persona">👤</button>
             <button id="publish-btn" class="icon-btn" title="Publish to JamPlays">🚀</button>
+            <button id="extend-btn" class="icon-btn" title="Extend this track using its original settings">⏩</button>
+            <button id="wav-btn" class="icon-btn" title="Convert to WAV">WAV</button>
+            <button id="stems-btn" class="icon-btn" title="Separate into stems">🎚</button>
+            <button id="lyrics-btn" class="icon-btn" title="Download word-level lyric timings as JSON">⏱</button>
             <a id="download-link" class="icon-btn" title="Download" download>↓</a>
           </div>
+          <p id="track-tools-status" class="status-line"></p>
+          <div id="stems-list" class="hidden" style="margin-top:8px;background:var(--surface-2);border-radius:var(--radius-sm);padding:10px;"></div>
 
           <div id="persona-form" class="persona-form hidden">
             <p class="section-label" style="margin: 12px 0 8px;">Save vocal as persona</p>
@@ -277,10 +301,22 @@
           <p class="section-label" style="margin: 0;">Personas</p>
           <span id="personas-count" class="hint">—</span>
         </div>
-        <p class="hint" style="margin: 4px 0 8px;">A persona is a saved voice profile. Generate a song with the vocal you want, then click "Save as persona" in the player to mint one.</p>
+        <p class="hint" style="margin: 4px 0 8px;">A <strong>persona</strong> is a voice profile minted from a song you generated — use the 👤 button in the player. A <strong>Voice</strong> is your own voice, recorded and verified in Suno's app; the API can't create one, so paste its ID below to use it here.</p>
         <div id="personas-list" class="library-list">
           <p class="empty-hint">No personas yet.</p>
         </div>
+        <div style="display:flex;gap:6px;margin-top:8px;align-items:flex-end;">
+          <div class="field" style="flex:1;margin-bottom:0;">
+            <label for="voice-id-input">Register a Suno Voice ID</label>
+            <input id="voice-id-input" type="text" placeholder="voice id from suno.com" />
+          </div>
+          <div class="field" style="width:110px;margin-bottom:0;">
+            <label for="voice-name-input">Label</label>
+            <input id="voice-name-input" type="text" maxlength="60" placeholder="My voice" />
+          </div>
+          <button id="voice-register-btn" class="btn-secondary" style="margin:0;height:32px;white-space:nowrap;">Add</button>
+        </div>
+        <p id="voice-register-status" class="status-line"></p>
       </div>
     </section>
   </main>

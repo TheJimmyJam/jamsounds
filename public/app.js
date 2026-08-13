@@ -34,9 +34,16 @@ const els = {
   refStatus: document.getElementById('ref-status'),
   audioWeightSlider: document.getElementById('audio-weight-slider'),
   audioWeightOut: document.getElementById('audio-weight-out'),
+  addVocalsBtn: document.getElementById('add-vocals-btn'),
+  addInstrumentalBtn: document.getElementById('add-instrumental-btn'),
   title: document.getElementById('title'),
   model: document.getElementById('model'),
   style: document.getElementById('style'),
+  boostStyleBtn: document.getElementById('boost-style-btn'),
+  durationEnabled: document.getElementById('duration-enabled'),
+  duration: document.getElementById('duration'),
+  durationOut: document.getElementById('duration-out'),
+  durationNote: document.getElementById('duration-note'),
   prompt: document.getElementById('prompt'),
   instrumental: document.getElementById('instrumental'),
   negativeTags: document.getElementById('negative-tags'),
@@ -45,6 +52,17 @@ const els = {
   weirdness: document.getElementById('weirdness'),
   audioWeight: document.getElementById('audio-weight'),
   personaSelect: document.getElementById('persona-select'),
+  personaModeNote: document.getElementById('persona-mode-note'),
+  voiceIdInput: document.getElementById('voice-id-input'),
+  voiceNameInput: document.getElementById('voice-name-input'),
+  voiceRegisterBtn: document.getElementById('voice-register-btn'),
+  voiceRegisterStatus: document.getElementById('voice-register-status'),
+  extendBtn: document.getElementById('extend-btn'),
+  wavBtn: document.getElementById('wav-btn'),
+  stemsBtn: document.getElementById('stems-btn'),
+  lyricsBtn: document.getElementById('lyrics-btn'),
+  trackToolsStatus: document.getElementById('track-tools-status'),
+  stemsList: document.getElementById('stems-list'),
   duetMode: document.getElementById('duet-mode'),
   duetFields: document.getElementById('duet-fields'),
   duetNameA: document.getElementById('duet-name-a'),
@@ -147,6 +165,27 @@ async function init() {
   els.audioWeightSlider.addEventListener('input', () => {
     els.audioWeightOut.textContent = parseFloat(els.audioWeightSlider.value).toFixed(2);
   });
+  if (els.addVocalsBtn) els.addVocalsBtn.addEventListener('click', handleAddVocals);
+  if (els.addInstrumentalBtn) els.addInstrumentalBtn.addEventListener('click', handleAddInstrumental);
+
+  // Length slider — Suno only accepts `duration` on V5_5, so the control follows
+  // the model dropdown and disables itself on anything older.
+  if (els.duration) {
+    els.duration.addEventListener('input', updateDurationUI);
+    els.durationEnabled.addEventListener('change', updateDurationUI);
+    els.model.addEventListener('change', updateDurationUI);
+    updateDurationUI();
+  }
+
+  if (els.boostStyleBtn) els.boostStyleBtn.addEventListener('click', handleBoostStyle);
+  if (els.personaSelect) els.personaSelect.addEventListener('change', updatePersonaModeNote);
+  if (els.voiceRegisterBtn) els.voiceRegisterBtn.addEventListener('click', handleRegisterVoice);
+
+  // Post-generation track tools
+  if (els.extendBtn) els.extendBtn.addEventListener('click', handleExtend);
+  if (els.wavBtn) els.wavBtn.addEventListener('click', handleConvertWav);
+  if (els.stemsBtn) els.stemsBtn.addEventListener('click', handleSeparateStems);
+  if (els.lyricsBtn) els.lyricsBtn.addEventListener('click', handleTimestampedLyrics);
 
   // Duet mode toggle — reveal/hide voice fields and update credit label.
   if (els.duetMode) {
@@ -494,11 +533,54 @@ function collectPayload() {
   } else {
     payload.audioWeight = parseFloat(els.audioWeight.value) || null;
   }
+  if (durationEnabled()) payload.duration = parseInt(els.duration.value, 10);
   if (els.personaSelect && els.personaSelect.value) {
     payload.personaId = els.personaSelect.value;
-    payload.personaModel = 'style_persona';
+    payload.personaModel = personaModelFor(els.personaSelect.value);
   }
   return payload;
+}
+
+/** style_persona for personas minted from a song, voice_persona for Suno Voices. */
+function personaModelFor(personaId) {
+  const p = savedPersonas.find(x => x.persona_id === personaId);
+  return (p && p.persona_model) || 'style_persona';
+}
+
+/** True only when the length slider is on AND the model actually supports it. */
+function durationEnabled() {
+  return !!(els.duration && els.durationEnabled?.checked && els.model.value === 'V5_5');
+}
+
+function updateDurationUI() {
+  const supported = els.model.value === 'V5_5';
+  const on = !!els.durationEnabled.checked;
+
+  els.durationEnabled.disabled = !supported;
+  els.duration.disabled = !supported || !on;
+
+  const secs = parseInt(els.duration.value, 10);
+  els.durationOut.textContent = formatDuration(secs);
+
+  if (!supported) {
+    els.durationNote.textContent = 'Length is V5_5 only — switch models to use it. Suno will pick the length.';
+  } else if (!on) {
+    els.durationNote.textContent = 'Suno picks the length.';
+  } else if (secs >= 300) {
+    els.durationNote.textContent = 'Long generations are more likely to drift or repeat. Consider extending a shorter take instead.';
+  } else {
+    els.durationNote.textContent = '';
+  }
+}
+
+function updatePersonaModeNote() {
+  if (!els.personaModeNote) return;
+  const id = els.personaSelect.value;
+  if (!id) { els.personaModeNote.textContent = ''; return; }
+  const model = personaModelFor(id);
+  els.personaModeNote.textContent = model === 'voice_persona'
+    ? 'Suno Voice — matches vocal identity and timbre.'
+    : 'Style persona — matches style, mood, arrangement and vocal character.';
 }
 
 // ---------- Duet mode ----------
@@ -603,7 +685,7 @@ async function handleGenerateDuet() {
     p.vocalGender = gender || null;
     if (personaId) {
       p.personaId = personaId;
-      p.personaModel = 'style_persona';
+      p.personaModel = personaModelFor(personaId);
     } else {
       delete p.personaId;
       delete p.personaModel;
@@ -813,6 +895,12 @@ function switchVersion(idx) {
     els.savePersonaBtn.textContent = '👤';
     els.savePersonaBtn.disabled = false;
   }
+  // Stems and tool status belong to the previous track — clear them.
+  if (els.stemsList) {
+    els.stemsList.classList.add('hidden');
+    els.stemsList.innerHTML = '';
+  }
+  if (els.trackToolsStatus) setStatus(els.trackToolsStatus, '', '');
 }
 
 function formatDuration(seconds) {
@@ -1186,10 +1274,22 @@ function repopulateFormFromTrack(t) {
   setNum(els.weirdness, b.weirdnessConstraint);
   setNum(els.audioWeight, b.audioWeight);
 
+  // Length — only meaningful on V5_5, and updateDurationUI re-checks that below.
+  if (els.duration && els.durationEnabled) {
+    if (b.duration != null && !Number.isNaN(Number(b.duration))) {
+      els.durationEnabled.checked = true;
+      els.duration.value = b.duration;
+    } else {
+      els.durationEnabled.checked = false;
+    }
+    updateDurationUI();
+  }
+
   // Persona — only restore if it still exists in the saved list.
   if (els.personaSelect) {
     const personaStillExists = b.personaId && savedPersonas.some(p => p.persona_id === b.personaId);
     els.personaSelect.value = personaStillExists ? b.personaId : '';
+    updatePersonaModeNote();
   }
 
   // Reference MP3: we can't re-upload the original file, so just clear any
@@ -1255,9 +1355,10 @@ async function refreshPersonas() {
 }
 
 function renderPersonaSelect() {
-  const optionsHtml = '<option value="">None</option>' + savedPersonas.map(p =>
-    `<option value="${escapeAttr(p.persona_id)}">${escapeHtml(p.name)}</option>`
-  ).join('');
+  const optionsHtml = '<option value="">None</option>' + savedPersonas.map(p => {
+    const suffix = p.persona_model === 'voice_persona' ? ' (voice)' : '';
+    return `<option value="${escapeAttr(p.persona_id)}">${escapeHtml(p.name)}${suffix}</option>`;
+  }).join('');
   const isValid = (v) => v && savedPersonas.some(p => p.persona_id === v);
   for (const sel of [els.personaSelect, els.duetPersonaA, els.duetPersonaB]) {
     if (!sel) continue;
@@ -1277,7 +1378,7 @@ function renderPersonas() {
   els.personasList.innerHTML = savedPersonas.map(p => `
     <div class="library-item" data-id="${escapeAttr(p.id)}">
       <div class="library-item-info">
-        <p class="library-item-title">${escapeHtml(p.name)}</p>
+        <p class="library-item-title">${escapeHtml(p.name)}${p.persona_model === 'voice_persona' ? ' <span class="hint">voice</span>' : ''}</p>
         <p class="library-item-meta">${escapeHtml((p.description || '').slice(0, 80))}</p>
       </div>
       <span class="library-item-date">${formatDate(p.created_at)}</span>
@@ -1307,6 +1408,7 @@ function renderPersonas() {
       const p = savedPersonas.find(x => x.id === id);
       if (p && els.personaSelect) {
         els.personaSelect.value = p.persona_id;
+        updatePersonaModeNote();
         setStatus(els.generateStatus, `Persona "${p.name}" selected for next generation.`, 'success');
       }
     });
@@ -1414,6 +1516,324 @@ async function handleSavePersona() {
     els.personaFormSave.disabled = false;
     els.personaFormCancel.disabled = false;
   }
+}
+
+/** Register a Suno Voice that was created (and verified) in Suno's own app. */
+async function handleRegisterVoice() {
+  const voiceId = (els.voiceIdInput?.value || '').trim();
+  const name = (els.voiceNameInput?.value || '').trim();
+
+  if (!voiceId) {
+    setStatus(els.voiceRegisterStatus, 'Paste the Voice ID from suno.com first.', 'error');
+    return;
+  }
+  if (!name) {
+    setStatus(els.voiceRegisterStatus, 'Give it a label so you can find it later.', 'error');
+    return;
+  }
+
+  els.voiceRegisterBtn.disabled = true;
+  setStatus(els.voiceRegisterStatus, 'Saving...', '');
+
+  try {
+    const res = await fetch(`${API}/create-persona`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: getProfile(), voiceId, name }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Register failed');
+
+    await refreshPersonas();
+    if (els.personaSelect) {
+      els.personaSelect.value = voiceId;
+      updatePersonaModeNote();
+    }
+    els.voiceIdInput.value = '';
+    els.voiceNameInput.value = '';
+    setStatus(els.voiceRegisterStatus, `Voice "${name}" saved and selected.`, 'success');
+  } catch (e) {
+    setStatus(els.voiceRegisterStatus, `Error: ${e.message}`, 'error');
+  } finally {
+    els.voiceRegisterBtn.disabled = false;
+  }
+}
+
+// ---------- Style boost ----------
+
+async function handleBoostStyle() {
+  const content = els.style.value.trim();
+  if (!content) {
+    setStatus(els.generateStatus, 'Write a rough style first, then Boost expands it.', 'error');
+    return;
+  }
+  els.boostStyleBtn.disabled = true;
+  setStatus(els.generateStatus, 'Expanding style...', '');
+  try {
+    const res = await fetch(`${API}/boost-style`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Boost failed');
+    els.style.value = data.style;
+    setStatus(els.generateStatus, 'Style expanded. Edit it before generating if it drifted.', 'success');
+    refreshCredits();
+  } catch (e) {
+    setStatus(els.generateStatus, `Error: ${e.message}`, 'error');
+  } finally {
+    els.boostStyleBtn.disabled = false;
+  }
+}
+
+// ---------- Reference-audio generation (add vocals / add instrumental) ----------
+
+async function handleAddVocals() {
+  if (!referenceUploadUrl) {
+    setStatus(els.refStatus, 'Upload a reference MP3 first.', 'error');
+    return;
+  }
+  const prompt = els.prompt.value.trim();
+  if (!prompt) {
+    setStatus(els.refStatus, 'Add lyrics in the Lyrics field — those are what gets sung.', 'error');
+    return;
+  }
+  await runReferenceJob('add-vocals', {
+    uploadUrl: referenceUploadUrl,
+    prompt,
+    title: els.title.value.trim() || 'Untitled',
+    style: els.style.value.trim(),
+    negativeTags: els.negativeTags.value.trim(),
+    model: els.model.value,
+    vocalGender: els.vocalGender.value || null,
+    styleWeight: parseFloat(els.styleWeight.value) || null,
+    weirdnessConstraint: parseFloat(els.weirdness.value) || null,
+    audioWeight: parseFloat(els.audioWeightSlider.value),
+  }, 'Adding vocals');
+}
+
+async function handleAddInstrumental() {
+  if (!referenceUploadUrl) {
+    setStatus(els.refStatus, 'Upload a reference MP3 first.', 'error');
+    return;
+  }
+  await runReferenceJob('add-instrumental', {
+    uploadUrl: referenceUploadUrl,
+    title: els.title.value.trim() || 'Untitled',
+    // This endpoint's field is `tags`, not `style` — the function handles the alias.
+    style: els.style.value.trim(),
+    negativeTags: els.negativeTags.value.trim(),
+    model: els.model.value,
+    styleWeight: parseFloat(els.styleWeight.value) || null,
+    weirdnessConstraint: parseFloat(els.weirdness.value) || null,
+    audioWeight: parseFloat(els.audioWeightSlider.value),
+  }, 'Building instrumental');
+}
+
+/** Both add-* endpoints return a normal generation taskId, so reuse the main poller. */
+async function runReferenceJob(fn, payload, label) {
+  els.generateBtn.disabled = true;
+  setStatus(els.refStatus, `${label}...`, '');
+  if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
+  currentResults = null;
+  currentTaskId = null;
+  activeLibraryTrackId = null;
+  playLoggedForCurrent = false;
+  autosavedIds = new Set();
+
+  try {
+    const res = await fetch(`${API}/${fn}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `${fn} failed`);
+    if (!data.taskId) throw new Error('Suno did not return a taskId');
+
+    currentTaskId = data.taskId;
+    setStatus(els.refStatus, '', '');
+    setStatus(els.generateStatus, `${label} — polling for results...`, '');
+    pollForResults();
+  } catch (e) {
+    setStatus(els.refStatus, `Error: ${e.message}`, 'error');
+    els.generateBtn.disabled = false;
+  }
+}
+
+// ---------- Track tools (extend / WAV / stems / lyric timings) ----------
+
+/** The track currently in the player, or null with a status message set. */
+function activeTrackForTools() {
+  const track = currentResults && currentResults[activeVersion];
+  if (!track || !track.id || !currentTaskId) {
+    setStatus(els.trackToolsStatus, 'Generate or open a track first.', 'error');
+    return null;
+  }
+  return track;
+}
+
+async function handleExtend() {
+  const track = activeTrackForTools();
+  if (!track) return;
+
+  els.extendBtn.disabled = true;
+  setStatus(els.trackToolsStatus, 'Extending using the original settings...', '');
+
+  try {
+    const res = await fetch(`${API}/extend-music`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audioId: track.id,
+        // Suno rejects a model that doesn't match the source audio.
+        model: track.model_name || els.model.value,
+        defaultParamFlag: false,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Extend failed');
+    if (!data.taskId) throw new Error('Suno did not return a taskId');
+
+    // Extends poll through the same record-info endpoint as a generation.
+    if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
+    currentResults = null;
+    currentTaskId = data.taskId;
+    autosavedIds = new Set();
+    setStatus(els.trackToolsStatus, '', '');
+    setStatus(els.generateStatus, 'Extending — polling for results...', '');
+    els.generateBtn.disabled = true;
+    pollForResults();
+  } catch (e) {
+    setStatus(els.trackToolsStatus, `Error: ${e.message}`, 'error');
+  } finally {
+    els.extendBtn.disabled = false;
+  }
+}
+
+async function handleConvertWav() {
+  const track = activeTrackForTools();
+  if (!track) return;
+
+  els.wavBtn.disabled = true;
+  setStatus(els.trackToolsStatus, 'Converting to WAV...', '');
+
+  try {
+    const res = await fetch(`${API}/convert-wav`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: currentTaskId, audioId: track.id }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'WAV conversion failed');
+
+    const result = await pollTask('wav', data.taskId, 'WAV');
+    const url = result?.wavUrl;
+    if (!url) throw new Error('No WAV URL returned');
+
+    // Suno's WAV links expire, so hand it straight to the browser.
+    window.open(url, '_blank');
+    setStatus(els.trackToolsStatus, 'WAV ready — opened in a new tab.', 'success');
+  } catch (e) {
+    setStatus(els.trackToolsStatus, `Error: ${e.message}`, 'error');
+  } finally {
+    els.wavBtn.disabled = false;
+  }
+}
+
+async function handleSeparateStems() {
+  const track = activeTrackForTools();
+  if (!track) return;
+
+  els.stemsBtn.disabled = true;
+  els.stemsList.classList.add('hidden');
+  setStatus(els.trackToolsStatus, 'Separating stems — this takes a couple of minutes...', '');
+
+  try {
+    const res = await fetch(`${API}/separate-vocals`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: currentTaskId, audioId: track.id, type: 'split_stem' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Stem separation failed');
+
+    const result = await pollTask('stems', data.taskId, 'Stems');
+    const stems = result?.stems || [];
+    if (!stems.length) throw new Error('No stems returned');
+
+    els.stemsList.innerHTML = stems.map(s => `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span style="flex:1;font-size:12px;">${escapeHtml(s.name)}</span>
+        <audio controls preload="none" src="${escapeAttr(s.url)}" style="height:28px;"></audio>
+        <a class="icon-btn" href="${escapeAttr(s.url)}" download title="Download">↓</a>
+      </div>
+    `).join('');
+    els.stemsList.classList.remove('hidden');
+    setStatus(els.trackToolsStatus, `${stems.length} stems ready.`, 'success');
+  } catch (e) {
+    setStatus(els.trackToolsStatus, `Error: ${e.message}`, 'error');
+  } finally {
+    els.stemsBtn.disabled = false;
+  }
+}
+
+async function handleTimestampedLyrics() {
+  const track = activeTrackForTools();
+  if (!track) return;
+
+  els.lyricsBtn.disabled = true;
+  setStatus(els.trackToolsStatus, 'Fetching lyric timings...', '');
+
+  try {
+    const res = await fetch(`${API}/timestamped-lyrics`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: currentTaskId, audioId: track.id }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lyric timing failed');
+    if (!data.words || !data.words.length) throw new Error('No aligned words returned — is this an instrumental?');
+
+    // Download as JSON rather than rendering — this is data for other tools.
+    const blob = new Blob([JSON.stringify(data.words, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(track.title || 'track').replace(/[^\w-]+/g, '_')}-timings.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus(els.trackToolsStatus, `${data.words.length} word timings downloaded.`, 'success');
+  } catch (e) {
+    setStatus(els.trackToolsStatus, `Error: ${e.message}`, 'error');
+  } finally {
+    els.lyricsBtn.disabled = false;
+  }
+}
+
+/**
+ * Polls a wav/stems task to completion. These use `successFlag`, not the `status`
+ * field music generation returns, which is why check-task is a separate endpoint.
+ */
+async function pollTask(kind, taskId, label) {
+  const maxAttempts = 60; // ~5 minutes
+  await sleep(5000);
+  for (let attempts = 1; attempts <= maxAttempts; attempts++) {
+    let data;
+    try {
+      const res = await fetch(`${API}/check-task?kind=${kind}&taskId=${encodeURIComponent(taskId)}`);
+      data = await res.json();
+    } catch {
+      await sleep(5000);
+      continue;
+    }
+    if (data.status === 'complete') return data.result;
+    if (data.status === 'error') throw new Error(data.message || data.raw_status || `${label} failed`);
+    setStatus(els.trackToolsStatus, `${label}: ${data.raw_status || 'pending'} (${attempts * 5}s)...`, '');
+    await sleep(5000);
+  }
+  throw new Error(`${label}: timed out`);
 }
 
 function escapeAttr(s) {

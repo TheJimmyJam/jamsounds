@@ -40,3 +40,26 @@ Table `public.js_tracks` (created in the Cannon Code Connect Supabase project). 
 - `POST /api/save-track` — downloads MP3 from Suno, uploads to Supabase Storage, inserts row
 - `GET /api/list-tracks` — returns saved library
 - `DELETE /api/list-tracks?id=…` — deletes a saved track
+- `POST /api/extend-music` — continues an existing track (polls via `check-status`)
+- `POST /api/add-vocals` — sings lyrics over an uploaded instrumental
+- `POST /api/add-instrumental` — builds an arrangement under an uploaded vocal
+- `POST /api/separate-vocals` — stem separation
+- `POST /api/convert-wav` — WAV master of a generated track
+- `GET /api/check-task?kind=wav|stems&taskId=…` — polls WAV / stem tasks
+- `POST /api/boost-style` — expands a terse style line into a fuller one
+- `POST /api/timestamped-lyrics` — word-level lyric timings (synchronous)
+
+## Notes on Suno parameters
+
+- **`duration`** (10–360s) is **V5_5 + custom mode only**. Sending it on an older model
+  makes Suno reject the whole request, so both the UI control and `generate-music.js`
+  gate on the model. The length slider is off by default — unchecked means Suno picks.
+- **`personaModel`** is `style_persona` (minted from a generated song) or `voice_persona`
+  (a Suno Voice). Voices **cannot be created through the API** — Suno requires a live
+  challenge-phrase recording in their own app as an anti-impersonation check. Create the
+  Voice at suno.com, then paste its ID into the Personas panel to register it here.
+- **Polling is not uniform.** Music generation and extends read `data.status` from
+  `/generate/record-info` (`check-status.js`); WAV and stem tasks read `data.successFlag`
+  from their own record-info endpoints (`check-task.js`). They can't share a handler.
+- **`add-instrumental` takes `tags`, not `style`** — the only generate endpoint that does.
+  The function accepts `style` as an alias and renames it before sending.

@@ -13,10 +13,20 @@ create table if not exists public.js_personas (
   source_suno_task_id text,                        -- Suno's taskId used to create the persona
   vocal_start numeric,                             -- segment start sec sent to Suno (optional)
   vocal_end numeric,                               -- segment end sec sent to Suno (optional)
+  -- 'style_persona' = minted from a generated song via /generate-persona.
+  -- 'voice_persona' = a Suno Voice created and verified in Suno's own app. The API
+  --                   cannot mint those, so persona_id holds a pasted voiceId and
+  --                   source_suno_audio_id / source_suno_task_id stay null.
   persona_model text not null default 'style_persona',
   created_at timestamptz not null default now()
 );
 
+-- Columns added after the original create. The live table already has these; these
+-- lines keep a fresh run of this file in sync with production. No-ops if present.
+alter table public.js_personas add column if not exists profile text not null default 'jimmy';
+alter table public.js_personas add column if not exists persona_model text not null default 'style_persona';
+
+create index if not exists js_personas_profile_idx on public.js_personas (profile);
 create index if not exists js_personas_user_email_idx on public.js_personas (user_email);
 create index if not exists js_personas_created_at_idx on public.js_personas (created_at desc);
 create unique index if not exists js_personas_persona_id_uidx on public.js_personas (persona_id);
