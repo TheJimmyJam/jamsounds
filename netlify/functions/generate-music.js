@@ -8,8 +8,12 @@
 // - If personaId is present: forwards it (and personaModel) so Suno reuses that voice profile.
 //   personaModel is 'style_persona' (minted from a generated song) or 'voice_persona'
 //   (a Suno Voice recorded and verified in Suno's own app).
-// - duration is 10–360 seconds and is V5_5-only. Sending it on an older model makes
-//   Suno reject the whole request, so it is dropped rather than forwarded.
+// - duration is 10–360 seconds and works on the V6 series and V5_5 only. Sending it
+//   on an older model makes Suno reject the whole request, so it is dropped rather
+//   than forwarded.
+
+// Models that accept `duration`. Mirrored in public/app.js as DURATION_MODELS.
+const DURATION_MODELS = ['V6', 'V6_WILD', 'V6_MINI', 'V5_5'];
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
@@ -21,7 +25,7 @@ exports.handler = async (event) => {
     title,
     style,
     prompt,
-    model = 'V5_5',
+    model = 'V6',
     instrumental = true,
     negativeTags,
     vocalGender,
@@ -61,10 +65,10 @@ exports.handler = async (event) => {
   if (styleWeight != null) sunoPayload.styleWeight = styleWeight;
   if (weirdnessConstraint != null) sunoPayload.weirdnessConstraint = weirdnessConstraint;
   if (audioWeight != null) sunoPayload.audioWeight = audioWeight;
-  // V5_5 + custom mode only. customMode is always true here, so the model is the
-  // only gate — but check it server-side too, since an older saved brief could
-  // carry a duration forward onto a V4 regeneration.
-  if (duration != null && model === 'V5_5') sunoPayload.duration = Math.round(duration);
+  // V6 series / V5_5 + custom mode only. customMode is always true here, so the
+  // model is the only gate — but check it server-side too, since an older saved
+  // brief could carry a duration forward onto a V4 regeneration.
+  if (duration != null && DURATION_MODELS.includes(model)) sunoPayload.duration = Math.round(duration);
   if (isCover) sunoPayload.uploadUrl = uploadUrl;
   if (personaId) {
     sunoPayload.personaId = personaId;

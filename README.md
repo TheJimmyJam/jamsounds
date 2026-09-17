@@ -51,13 +51,21 @@ Table `public.js_tracks` (created in the Cannon Code Connect Supabase project). 
 
 ## Notes on Suno parameters
 
-- **`duration`** (10–360s) is **V5_5 + custom mode only**. Sending it on an older model
-  makes Suno reject the whole request, so both the UI control and `generate-music.js`
-  gate on the model. The length slider is off by default — unchecked means Suno picks.
+- **`model`** — the current series is `V6` (standard, our default), `V6_WILD`
+  (experimental) and `V6_MINI` (lightweight). `V5_5`, `V5`, `V4_5PLUS`, `V4_5ALL`,
+  `V4_5` and `V4` are deprecated by Suno and kept in the dropdown only so older tracks
+  can be extended — `extend-music` requires the model to match the source audio, so
+  a V4-era track still needs V4. New work should use a V6 model.
+- **`duration`** (10–360s) is **V6 / V6_WILD / V6_MINI / V5_5 + custom mode only**.
+  Sending it on an older model makes Suno reject the whole request, so both the UI
+  control and `generate-music.js` gate on the model — the list lives in
+  `DURATION_MODELS` in both files and has to stay in sync. The length slider is off by
+  default — unchecked means Suno picks.
 - **`personaModel`** is `style_persona` (minted from a generated song) or `voice_persona`
   (a Suno Voice). Voices **cannot be created through the API** — Suno requires a live
   challenge-phrase recording in their own app as an anti-impersonation check. Create the
   Voice at suno.com, then paste its ID into the Personas panel to register it here.
+  `voice_persona` also only works on V5, V5_5 and the V6 series — not the V4 models.
 - **Polling is not uniform.** Music generation and extends read `data.status` from
   `/generate/record-info` (`check-status.js`); WAV and stem tasks read `data.successFlag`
   from their own record-info endpoints (`check-task.js`). They can't share a handler.

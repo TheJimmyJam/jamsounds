@@ -9,6 +9,10 @@ const DEFAULT_PROFILE = 'jimmy';
 // once every version of that task is safely in the library.
 const PENDING_KEY = 'jamsounds.pendingGeneration';
 const PENDING_MAX_AGE_MS = 2 * 60 * 60 * 1000; // Suno tasks expire long before this
+// Models that accept `duration`. The V6 series plus V5_5 — everything older
+// rejects the whole request if `duration` is present. generate-music.js keeps
+// its own copy of this list, since a stale saved brief can bypass the UI.
+const DURATION_MODELS = ['V6', 'V6_WILD', 'V6_MINI', 'V5_5'];
 
 /** Returns the currently selected profile slug, e.g. 'jimmy' or 'courtney'. */
 function getProfile() {
@@ -221,8 +225,8 @@ async function init() {
   if (els.addVocalsBtn) els.addVocalsBtn.addEventListener('click', handleAddVocals);
   if (els.addInstrumentalBtn) els.addInstrumentalBtn.addEventListener('click', handleAddInstrumental);
 
-  // Length slider — Suno only accepts `duration` on V5_5, so the control follows
-  // the model dropdown and disables itself on anything older.
+  // Length slider — Suno only accepts `duration` on the V6 series and V5_5, so
+  // the control follows the model dropdown and disables itself on anything older.
   if (els.duration) {
     els.duration.addEventListener('input', updateDurationUI);
     els.durationEnabled.addEventListener('change', updateDurationUI);
@@ -630,11 +634,11 @@ function personaModelFor(personaId) {
 
 /** True only when the length slider is on AND the model actually supports it. */
 function durationEnabled() {
-  return !!(els.duration && els.durationEnabled?.checked && els.model.value === 'V5_5');
+  return !!(els.duration && els.durationEnabled?.checked && DURATION_MODELS.includes(els.model.value));
 }
 
 function updateDurationUI() {
-  const supported = els.model.value === 'V5_5';
+  const supported = DURATION_MODELS.includes(els.model.value);
   const on = !!els.durationEnabled.checked;
 
   els.durationEnabled.disabled = !supported;
@@ -644,7 +648,7 @@ function updateDurationUI() {
   els.durationOut.textContent = formatDuration(secs);
 
   if (!supported) {
-    els.durationNote.textContent = 'Length is V5_5 only — switch models to use it. Suno will pick the length.';
+    els.durationNote.textContent = 'Length needs a V6 model or V5.5 — switch models to use it. Suno will pick the length.';
   } else if (!on) {
     els.durationNote.textContent = 'Suno picks the length.';
   } else if (secs >= 300) {
@@ -1461,7 +1465,7 @@ function repopulateFormFromTrack(t) {
   setNum(els.weirdness, b.weirdnessConstraint);
   setNum(els.audioWeight, b.audioWeight);
 
-  // Length — only meaningful on V5_5, and updateDurationUI re-checks that below.
+  // Length — only meaningful on DURATION_MODELS, and updateDurationUI re-checks that below.
   if (els.duration && els.durationEnabled) {
     if (b.duration != null && !Number.isNaN(Number(b.duration))) {
       els.durationEnabled.checked = true;

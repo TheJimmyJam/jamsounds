@@ -24,7 +24,7 @@ exports.handler = async (event) => {
     title,
     style,
     negativeTags,
-    model = 'V5_5',
+    model = 'V6',
     vocalGender,
     styleWeight,
     weirdnessConstraint,

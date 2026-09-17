@@ -26,7 +26,7 @@ exports.handler = async (event) => {
     tags,
     style, // alias — Suno's field here is `tags`
     negativeTags,
-    model = 'V5_5',
+    model = 'V6',
     vocalGender,
     styleWeight,
     weirdnessConstraint,

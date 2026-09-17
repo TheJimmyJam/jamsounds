@@ -50,18 +50,25 @@
         <div class="field">
           <label for="model">Model</label>
           <select id="model">
-            <option value="V5_5">V5_5 — newest</option>
-            <option value="V5">V5</option>
-            <option value="V4_5PLUS">V4.5 Plus</option>
-            <option value="V4_5ALL">V4.5 All</option>
-            <option value="V4_5">V4.5</option>
-            <option value="V4">V4</option>
+            <optgroup label="Current">
+              <option value="V6">V6 — newest, recommended</option>
+              <option value="V6_WILD">V6 Wild — experimental</option>
+              <option value="V6_MINI">V6 Mini — lightweight</option>
+            </optgroup>
+            <optgroup label="Deprecated">
+              <option value="V5_5">V5.5</option>
+              <option value="V5">V5</option>
+              <option value="V4_5PLUS">V4.5 Plus</option>
+              <option value="V4_5ALL">V4.5 All</option>
+              <option value="V4_5">V4.5</option>
+              <option value="V4">V4</option>
+            </optgroup>
           </select>
         </div>
       </div>
 
       <div class="field" id="duration-field">
-        <label for="duration">Length <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— V5_5 only. Unchecked = let Suno decide.</span></label>
+        <label for="duration">Length <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— V6 series and V5.5 only. Unchecked = let Suno decide.</span></label>
         <div style="display:flex;gap:8px;align-items:center;">
           <input id="duration-enabled" type="checkbox" style="margin:0;width:auto;" />
           <input id="duration" type="range" min="10" max="360" step="5" value="180" style="flex:1;" disabled />
