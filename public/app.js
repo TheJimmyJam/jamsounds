@@ -9,6 +9,14 @@ const DEFAULT_PROFILE = 'jimmy';
 // once every version of that task is safely in the library.
 const PENDING_KEY = 'jamsounds.pendingGeneration';
 const PENDING_MAX_AGE_MS = 2 * 60 * 60 * 1000; // Suno tasks expire long before this
+// Rolling log of every taskId we've ever been handed, newest first, capped at 30
+// and NEVER auto-cleared. PENDING_KEY tracks only the single in-flight generation
+// and is deliberately cleared on success; this is the backstop for everything it
+// can't cover — a duet's two parallel tasks, a generation abandoned past
+// PENDING_MAX_AGE_MS, a task orphaned by a failed save. Read it from the console
+// with jamsoundsTaskHistory().
+const TASK_HISTORY_KEY = 'jamsounds.taskHistory';
+const TASK_HISTORY_MAX = 30;
 // Models that accept `duration`. The V6 series plus V5_5 — everything older
 // rejects the whole request if `duration` is present. generate-music.js keeps
 // its own copy of this list, since a stale saved brief can bypass the UI.
@@ -55,6 +63,36 @@ function snapshotFor(taskId) {
   const p = readPending();
   return (p && p.taskId === taskId && p.payload) ? p.payload : null;
 }
+
+function readTaskHistory() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TASK_HISTORY_KEY) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch (e) { return []; }
+}
+
+/**
+ * Logs a taskId the instant Suno returns it. Fire-and-forget: never throws, and
+ * never blocks the generation path it sits in.
+ */
+function recordTaskHistory(taskId, meta = {}) {
+  if (!taskId) return;
+  const entry = { taskId, startedAt: new Date().toISOString(), profile: getProfile(), ...meta };
+  try {
+    const hist = readTaskHistory();
+    hist.unshift(entry);
+    localStorage.setItem(TASK_HISTORY_KEY, JSON.stringify(hist.slice(0, TASK_HISTORY_MAX)));
+  } catch (e) { /* quota / private mode — non-fatal */ }
+  console.log(`[JamSounds] task ${taskId} started (${entry.title || 'untitled'})`);
+}
+
+// Manual recovery hatch: jamsoundsTaskHistory() in the browser console prints
+// every taskId this browser has seen, so a lost generation can be fetched by hand.
+window.jamsoundsTaskHistory = () => {
+  const hist = readTaskHistory();
+  console.table(hist);
+  return hist;
+};
 
 /** True while a generation is running or its results are still being saved. */
 function generationInFlight() {
@@ -579,6 +617,7 @@ async function handleGenerate() {
     if (!res.ok) throw new Error(data.error || 'Generation failed');
     if (!data.taskId) throw new Error('Suno did not return a taskId');
 
+    recordTaskHistory(data.taskId, { mode: 'generate', title: payload.title });
     currentTaskId = data.taskId;
     activeGenerationTaskId = data.taskId;
     // Snapshot + persist BEFORE the first poll. Credits are already spent; from
@@ -796,6 +835,9 @@ async function handleGenerateDuet() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Generation failed');
     if (!data.taskId) throw new Error('Suno did not return a taskId');
+    // A duet runs two tasks at once, so the single pending record can't hold
+    // both. The history log is the only handle on these if the tab goes away.
+    recordTaskHistory(data.taskId, { mode: 'duet', role, voice_name: voiceName, title: payload.title });
 
     // 2. Poll until complete
     const tracks = await pollDuetTask(data.taskId, voiceName);
@@ -840,7 +882,7 @@ async function handleGenerateDuet() {
 async function pollDuetTask(taskId, voiceName) {
   // Polls one Suno task to completion. Returns the final tracks array.
   // Independent of the single-track currentTaskId so two of these can run in parallel.
-  const maxAttempts = 60; // ~5 minutes
+  const maxAttempts = 144; // ~12 minutes — matches pollForResults
   await sleep(8000);
   for (let attempts = 1; attempts <= maxAttempts; attempts++) {
     let data;
@@ -956,7 +998,10 @@ async function resumePendingGeneration() {
 function pollForResults() {
   if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
   let attempts = 0;
-  const maxAttempts = 60; // 5 minutes at 5s interval
+  // 12 minutes at 5s. Cover generations from an MP3 reference routinely run past
+  // the old 5-minute ceiling; timing out mid-generation forced a manual reload to
+  // recover a track that was about to land on its own.
+  const maxAttempts = 144;
   // Capture the task ID this poller belongs to. ONLY a newer generation
   // supersedes it — opening a saved library track moves currentTaskId but must
   // leave this poll running, or a paid generation dies with no way to find it.
@@ -1001,7 +1046,7 @@ function pollForResults() {
       } else {
         // Deliberately does NOT clear the pending record — the task may still
         // finish on Suno's side, and a reload will pick it back up.
-        setStatus(els.generateStatus, 'Timed out waiting. Reload the page — the track will be recovered if Suno finishes it.', 'error');
+        setStatus(els.generateStatus, `Timed out waiting. Reload the page — the track will be recovered if Suno finishes it (task ${myTaskId}).`, 'error');
         els.generateBtn.disabled = false;
         pollingTimer = null;
       }
@@ -1847,6 +1892,7 @@ async function runReferenceJob(fn, payload, label) {
     if (!res.ok) throw new Error(data.error || `${fn} failed`);
     if (!data.taskId) throw new Error('Suno did not return a taskId');
 
+    recordTaskHistory(data.taskId, { mode: fn, title: payload.title });
     currentTaskId = data.taskId;
     activeGenerationTaskId = data.taskId;
     pendingGeneration = { taskId: data.taskId, payload, startedAt: Date.now(), profile: getProfile() };
@@ -1897,6 +1943,7 @@ async function handleExtend() {
     // Extends poll through the same record-info endpoint as a generation.
     if (pollingTimer) { clearTimeout(pollingTimer); pollingTimer = null; }
     currentResults = null;
+    recordTaskHistory(data.taskId, { mode: 'extend', title: els.title.value.trim() || track.title });
     currentTaskId = data.taskId;
     activeGenerationTaskId = data.taskId;
     // extend-music takes only audioId/model, so snapshot the form as it stands
