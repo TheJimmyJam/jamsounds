@@ -57,6 +57,8 @@ html, body {
   gap: 10px;
 }
 
+.brand-icon.brand-icon-img { background: none; overflow: hidden; }
+.brand-icon-img img { width: 100%; height: 100%; display: block; }
 .brand-icon {
   width: 32px;
   height: 32px;
