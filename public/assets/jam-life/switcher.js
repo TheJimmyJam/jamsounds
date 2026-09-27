@@ -46,7 +46,7 @@
     { id: 'jamcompare', name: 'JamCompare', url: 'https://compare.cannoncodeconnect.com/', group: 'life' },
     { id: 'jamcut', name: 'JamCut', url: 'https://jamcut.cannoncodeconnect.com/', group: 'life' },
     { id: 'jamplays', name: 'JamPlays', url: 'https://jamplays.cannoncodeconnect.com/', group: 'life' },
-    { id: 'jamfit', name: 'JamFit', url: 'https://jamfit.cannoncodeconnect.com/', group: 'life' },
+    { id: 'jamfit', name: 'JamFit', url: 'https://fit.cannoncodeconnect.com/', group: 'life' },
     { id: 'jamtravel', name: 'JamTravel', url: 'https://travel.cannoncodeconnect.com/', group: 'life' },
     { id: 'jamsounds', name: 'JamSounds', url: 'https://sounds.cannoncodeconnect.com/', group: 'life' },
     { id: 'jampost', name: 'JamPost', url: 'https://post.cannoncodeconnect.com/app/', group: 'work' },
