@@ -25,11 +25,8 @@ code {
   padding: var(--jl-space-6) var(--jl-gutter) calc(var(--jl-safe-bottom) + var(--jl-space-7));
 }
 .rail { display: contents; }
-/* Phone and tablet order: profile, player, Top played, then the view. */
-.rail-head { order: 0; }
-.now { order: 1; }
-.rail-top { order: 2; }
-.list, .personas, .create { order: 3; }
+/* Phone and tablet: the screen follows the DOM (profile, Top played, player,
+   then the view), so Tab and reading order match what is shown. */
 
 .layout:not([data-view="library"]) :is(.rail-head, .rail-top, .list) { display: none; }
 .layout:not([data-view="personas"]) .personas { display: none; }
@@ -77,6 +74,8 @@ code {
 @media (max-width: 1179.98px) { .rail-top { margin-top: 0; } }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--jl-space-3); margin-bottom: var(--jl-space-3); }
 .section-head .jl-eyebrow { margin: 0; }
+.section-head h2:focus { outline: none; }
+.section-head h2:focus-visible { outline: 3px solid var(--jl-accent); outline-offset: 3px; }
 .count { font-size: var(--jl-text-caption); font-weight: 600; color: var(--jl-muted); }
 
 .top-list { display: flex; flex-direction: column; }

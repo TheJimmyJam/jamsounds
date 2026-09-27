@@ -220,9 +220,12 @@ const askEls = {
 // a notice that fires while a confirm is open waits until the confirm is
 // answered, and each request resolves only its own promise. Listeners are
 // added per request and removed when it settles; a settled request ignores
-// any late event.
+// any late event. A dialog shown straight after another closes ignores
+// activation (click, submit, Enter/Space) for ASK_ARM_MS, so the second half
+// of a double-click or a repeated Enter can't answer it; Escape still cancels.
 const askQueue = [];
 let askActive = null;
+const ASK_ARM_MS = 300;
 
 function openAsk(opts) {
   return new Promise((resolve) => {
@@ -231,7 +234,7 @@ function openAsk(opts) {
   });
 }
 
-function pumpAsk() {
+function pumpAsk(handoff = false) {
   if (askActive || !askQueue.length) return;
   const req = askQueue.shift();
   askActive = req;
@@ -245,6 +248,8 @@ function pumpAsk() {
   a.yes.className = `jl-btn ${danger ? 'jl-btn-danger' : 'jl-btn-primary'}`;
   a.no.hidden = !cancel;
   const back = document.activeElement;
+  const armedAt = handoff ? performance.now() + ASK_ARM_MS : 0;
+  const arming = () => performance.now() < armedAt;
   let settled = false;
   const done = (v) => {
     if (settled || askActive !== req) return;
@@ -252,18 +257,21 @@ function pumpAsk() {
     a.form.removeEventListener('submit', onSubmit);
     a.no.removeEventListener('click', onNo);
     a.dlg.removeEventListener('cancel', onCancel);
+    a.dlg.removeEventListener('keydown', onKey, true);
     if (a.dlg.open) a.dlg.close();
     askActive = null;
     if (back && back.focus && document.contains(back)) back.focus({ preventScroll: true });
     req.resolve(v);
-    pumpAsk();
+    pumpAsk(true);
   };
-  const onSubmit = (e) => { e.preventDefault(); done(field ? a.input.value : true); };
-  const onNo = () => done(field ? null : false);
+  const onSubmit = (e) => { e.preventDefault(); if (arming()) return; done(field ? a.input.value : true); };
+  const onNo = () => { if (arming()) return; done(field ? null : false); };
   const onCancel = (e) => { e.preventDefault(); done(field ? null : false); };
+  const onKey = (e) => { if (arming() && (e.key === 'Enter' || e.key === ' ')) e.preventDefault(); };
   a.form.addEventListener('submit', onSubmit);
   a.no.addEventListener('click', onNo);
   a.dlg.addEventListener('cancel', onCancel);
+  a.dlg.addEventListener('keydown', onKey, true);
   a.dlg.showModal();
   if (field) a.input.focus();
   else if (cancel && danger) a.no.focus();
@@ -1466,9 +1474,11 @@ function renderLibrary() {
       const t = savedTracks.find(x => x.id === btn.dataset.id);
       if (!(await ask({ title: `Delete "${(t && t.title) || 'this track'}"?`, action: 'Delete track' }))) return;
       const id = btn.dataset.id;
+      const index = [...els.libraryList.querySelectorAll('.library-item-delete')].indexOf(btn);
       try {
         await fetch(`${API}/list-tracks?id=${id}`, { method: 'DELETE' });
         await refreshLibrary();
+        focusAfterDelete(els.libraryList, index, 'library-title');
       } catch (e) {
         tell({ title: 'Delete failed', body: e.message });
       }
@@ -1602,6 +1612,16 @@ async function playSavedTrack(t) {
   // the row's direct columns for tracks saved before music_brief existed.
   repopulateFormFromTrack(t);
   return true;
+}
+
+/**
+ * After a row is deleted and the list re-rendered, focus the delete button now
+ * in the same place (the next row), else the last one, else the list heading.
+ */
+function focusAfterDelete(list, index, headingId) {
+  const btns = list.querySelectorAll('.library-item-delete');
+  const target = btns[Math.min(index, btns.length - 1)] || document.getElementById(headingId);
+  if (target) target.focus({ preventScroll: false });
 }
 
 /** Marks the library row that is in the player. */
@@ -1760,9 +1780,11 @@ function renderPersonas() {
         action: 'Delete persona',
       }))) return;
       const id = btn.dataset.id;
+      const index = [...els.personasList.querySelectorAll('.library-item-delete')].indexOf(btn);
       try {
         await fetch(`${API}/list-personas?id=${id}`, { method: 'DELETE' });
         await refreshPersonas();
+        focusAfterDelete(els.personasList, index, 'personas-title');
       } catch (e) {
         tell({ title: 'Delete failed', body: e.message });
       }
