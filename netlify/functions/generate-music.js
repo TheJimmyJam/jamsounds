@@ -15,7 +15,12 @@
 // Models that accept `duration`. Mirrored in public/app.js as DURATION_MODELS.
 const DURATION_MODELS = ['V6', 'V6_WILD', 'V6_MINI', 'V5_5'];
 
+const { denyUnlessOwner } = require('../lib/owner');
+
 exports.handler = async (event) => {
+  const denied = denyUnlessOwner(event);
+  if (denied) return denied;
+
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
 
   let body;

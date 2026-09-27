@@ -14,7 +14,12 @@
 const SUNO_BASE = 'https://api.sunoapi.org/api/v1';
 const NO_OP_CALLBACK = 'https://example.com/no-op';
 
+const { denyUnlessOwner } = require('../lib/owner');
+
 exports.handler = async (event) => {
+  const denied = denyUnlessOwner(event);
+  if (denied) return denied;
+
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
 
   let body;

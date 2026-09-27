@@ -7,7 +7,12 @@
 
 const BUCKET = 'jamsounds-audio';
 
+const { denyUnlessOwner } = require('../lib/owner');
+
 exports.handler = async (event) => {
+  const denied = denyUnlessOwner(event);
+  if (denied) return denied;
+
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
