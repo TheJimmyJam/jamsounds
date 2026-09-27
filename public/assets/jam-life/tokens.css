@@ -1,0 +1,150 @@
+/* Jam personal apps: Signal (direction C) tokens.
+ *
+ * Load after theme-init.js and switcher.js, before base.css and components.css:
+ *
+ *   <script src="/assets/jam-life/theme-init.js" data-app="jamtravel"
+ *           data-canvas-light="#F1F4F5" data-canvas-dark="#0C1216"></script>
+ *   <script src="/assets/jam-life/switcher.js"></script>
+ *   <link rel="stylesheet" href="/assets/jam-life/tokens.css">
+ *   <link rel="stylesheet" href="/assets/jam-life/base.css">
+ *   <link rel="stylesheet" href="/assets/jam-life/components.css">
+ *
+ * theme-init.js puts data-theme (light|dark) and data-app on <html>; every
+ * value below keys off those two. The picker and appearance control read the
+ * --jl-* names (see base.css); components.css and the apps read the rest.
+ *
+ * Colour contract (design/r3/KIT.md): bg is the page, panel a solid card or
+ * dialog, raised a selected row or quiet control. ink and muted are text;
+ * line is borders and graphics only, never text. accent and accent2 may be
+ * text on bg, panel or raised; on is the only text on an accent fill.
+ * scripts/check-life-contrast.mjs reads this file and fails under 4.5:1.
+ */
+
+@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/barlow-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 500; font-display: swap; src: url('fonts/barlow-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 600; font-display: swap; src: url('fonts/barlow-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 700; font-display: swap; src: url('fonts/barlow-latin-700-normal.woff2') format('woff2'); }
+
+/* ---- Light neutrals, and everything that is not a colour ---- */
+:root {
+  --jl-bg: #F1F4F5;
+  --jl-panel: #FFFFFF;
+  --jl-raised: #E1E8EB;
+  --jl-ink: #14242C;
+  --jl-muted: #43545D;
+  --jl-line: #74858D;
+
+  /* No data-app: a neutral accent until the app names itself. */
+  --jl-accent: var(--jl-ink);
+  --jl-accent2: var(--jl-muted);
+  --jl-on: var(--jl-panel);
+
+  --jl-shadow: 0 18px 60px rgba(0, 0, 0, 0.2);
+  --jl-scrim: rgba(0, 0, 0, 0.27);
+
+  /* Type: Barlow 400–700, Arial fallback. */
+  --jl-font: 'Barlow', Arial, sans-serif;
+  --jl-text-micro: 11px;
+  --jl-text-caption: 12px;
+  --jl-text-label: 13px;
+  --jl-text-compact: 14px;
+  --jl-text-body: 16px;
+  --jl-text-subheading: 19px;
+  --jl-text-phone-title: 29px;
+  --jl-text-editing-title: 30px;
+  --jl-text-page-title: 34px;
+  --jl-text-media-title: 46px;
+  --jl-text-cover-title: 108px;
+  --jl-leading-body: 1.45;
+  --jl-leading-heading: 1.08;
+  --jl-leading-control: 1.15;
+  --jl-tracking-heading: -0.035em;
+  --jl-tracking-eyebrow: 0.13em;
+
+  /* Radii */
+  --jl-radius-surface: 3px;
+  --jl-radius-hero: 3px;
+  --jl-radius-control: 3px;
+  --jl-radius-row: 3px;
+  --jl-radius-dialog: 3px;
+  --jl-radius-sheet: 24px;
+  --jl-radius-score: 8px;
+  --jl-radius-play: 4px;
+
+  /* Spacing: 4 8 12 16 20 24 32 40 48 64 */
+  --jl-space-1: 4px;
+  --jl-space-2: 8px;
+  --jl-space-3: 12px;
+  --jl-space-4: 16px;
+  --jl-space-5: 20px;
+  --jl-space-6: 24px;
+  --jl-space-7: 32px;
+  --jl-space-8: 40px;
+  --jl-space-9: 48px;
+  --jl-space-10: 64px;
+  --jl-gutter: 30px;
+  --jl-column-gap: 24px;
+  --jl-index-width: 220px;
+  --jl-inspector-width: 240px;
+
+  /* Targets. Density never shrinks these. */
+  --jl-target: 40px;
+  --jl-target-edit: 44px;
+  --jl-target-play: 58px;
+
+  /* Motion */
+  --jl-motion-feedback: 100ms;
+  --jl-motion-panel: 160ms;
+  --jl-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* The height of an app's fixed bottom bar, if it has one; toasts sit above it. */
+  --jl-bottom-bar: 0px;
+}
+
+@media (max-width: 767.98px) {
+  :root {
+    --jl-gutter: 22px;
+    --jl-target: 48px;
+    --jl-target-edit: 48px;
+    --jl-target-play: 56px;
+    --jl-tracking-eyebrow: 0.07em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --jl-motion-feedback: 0ms;
+    --jl-motion-panel: 0ms;
+  }
+}
+
+/* ---- Dark neutrals ---- */
+:root[data-theme="dark"] {
+  --jl-bg: #0C1216;
+  --jl-panel: #141E24;
+  --jl-raised: #223039;
+  --jl-ink: #F4F8FA;
+  --jl-muted: #BDCAD1;
+  --jl-line: #607681;
+  --jl-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+  --jl-scrim: rgba(0, 0, 0, 0.55);
+}
+
+/* ---- Per-app accents (KIT: shared accent pairs) ---- */
+:root[data-app="jamcut"] { --jl-accent: #00616B; --jl-accent2: #613BB2; --jl-on: #FFFFFF; }
+:root[data-theme="dark"][data-app="jamcut"] { --jl-accent: #71E0EC; --jl-accent2: #C9B4FF; --jl-on: #101218; }
+
+:root[data-app="jamcompare"] { --jl-accent: #006477; --jl-accent2: #225BC2; --jl-on: #FFFFFF; }
+:root[data-theme="dark"][data-app="jamcompare"] { --jl-accent: #70DDF4; --jl-accent2: #ADC9FF; --jl-on: #101218; }
+
+:root[data-app="jamplays"] { --jl-accent: #755326; --jl-accent2: #405C53; --jl-on: #FFFFFF; }
+:root[data-theme="dark"][data-app="jamplays"] { --jl-accent: #E8CA92; --jl-accent2: #B3D8CA; --jl-on: #101218; }
+
+:root[data-app="jamfit"] { --jl-accent: #633AB3; --jl-accent2: #006477; --jl-on: #FFFFFF; }
+:root[data-theme="dark"][data-app="jamfit"] { --jl-accent: #CBB4FF; --jl-accent2: #79DFEE; --jl-on: #101218; }
+
+:root[data-app="jamtravel"] { --jl-accent: #235ABA; --jl-accent2: #006476; --jl-on: #FFFFFF; }
+:root[data-theme="dark"][data-app="jamtravel"] { --jl-accent: #A9C8FF; --jl-accent2: #7DDBEE; --jl-on: #101218; }
+
+:root[data-app="jamsounds"] { --jl-accent: #743BA5; --jl-accent2: #5346B7; --jl-on: #FFFFFF; }
+:root[data-theme="dark"][data-app="jamsounds"] { --jl-accent: #D8B4F4; --jl-accent2: #BCBCFF; --jl-on: #101218; }

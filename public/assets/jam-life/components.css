@@ -1,0 +1,415 @@
+/* Jam personal apps: Signal parts. Needs tokens.css first.
+ *
+ * Every class is prefixed jl-. States are real attributes where one exists
+ * (aria-pressed, aria-current, aria-busy, :disabled, [open]) so the look and
+ * the semantics cannot drift apart. Focus everywhere is a 3px accent ring at a
+ * 3px offset, keyboard only. Text only ever uses the pairs in tokens.css.
+ *
+ *   Page        html/body base, .jl-eyebrow, .jl-muted, .jl-num
+ *   Header      .jl-header (switcher top-left, below the clock), .jl-header-nav, .jl-spacer
+ *   Buttons     .jl-btn (secondary) + -primary / -text / -danger / -icon / -edit / -sm; .jl-play
+ *   Controls    .jl-tabs, .jl-seg, .jl-field, .jl-input, .jl-check, .jl-err
+ *   Media       .jl-transport, .jl-scrub, .jl-take, .jl-score, .jl-pick, .jl-cover
+ *   Surfaces    .jl-panel, .jl-dialog (<dialog>), .jl-sheet, .jl-toast, .jl-empty, .jl-loading
+ */
+
+/* ---------- page ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html {
+  background: var(--jl-bg);
+  color: var(--jl-ink);
+  font-family: var(--jl-font);
+  font-size: var(--jl-text-body);
+  line-height: var(--jl-leading-body);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body { margin: 0; background: var(--jl-bg); color: var(--jl-ink); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button, a, input, select, textarea, summary { -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+
+:where(h1, h2, h3) { line-height: var(--jl-leading-heading); font-weight: 700; margin: 0; }
+:where(h1) { font-size: var(--jl-text-page-title); letter-spacing: var(--jl-tracking-heading); font-weight: 600; }
+:where(p) { margin: 0; }
+:where(a) { color: var(--jl-accent); text-underline-offset: 3px; }
+
+.jl-eyebrow {
+  margin: 0 0 var(--jl-space-2);
+  font-size: var(--jl-text-caption); font-weight: 600; line-height: var(--jl-leading-control);
+  letter-spacing: var(--jl-tracking-eyebrow); text-transform: uppercase; color: var(--jl-muted);
+}
+.jl-muted { color: var(--jl-muted); }
+.jl-num { font-variant-numeric: tabular-nums; }
+.jl-kbd {
+  font-family: inherit; font-size: var(--jl-text-micro); line-height: 1;
+  border: 1px solid var(--jl-line); border-radius: 3px; padding: 3px 6px; margin-left: var(--jl-space-2);
+  color: var(--jl-ink);
+}
+@media (max-width: 767.98px) { .jl-kbd { display: none; } }
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--jl-accent);
+  outline-offset: 3px;
+}
+
+/* ---------- header bar ---------- */
+/* The switcher is first, top-left, and starts below --jl-safe-top, so nothing
+   tappable sits under the iPhone clock. */
+.jl-header {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: var(--jl-space-5);
+  min-height: 64px;
+  padding: calc(var(--jl-safe-top) + 4px) var(--jl-gutter) 8px;
+  background: var(--jl-panel);
+  border-bottom: 1px solid var(--jl-line);
+}
+@media (min-width: 768px) { .jl-header { min-height: 80px; padding-top: max(12px, var(--jl-safe-top)); padding-bottom: 12px; } }
+@media (max-width: 767.98px) { .jl-header { gap: var(--jl-space-2); padding-left: 12px; padding-right: 12px; } }
+.jl-header jam-switcher .jl-sw-name { font-size: 18px; font-weight: 700; }
+.jl-header jam-switcher .jl-sw-icon { width: 36px; height: 36px; }
+@media (max-width: 767.98px) {
+  .jl-header jam-switcher .jl-sw-name { font-size: 17px; }
+  .jl-header jam-switcher .jl-sw-icon { width: 32px; height: 32px; }
+}
+.jl-spacer { flex: 1 1 auto; min-width: 0; }
+.jl-header-actions { display: flex; align-items: center; gap: var(--jl-space-2); flex: none; }
+
+/* ---------- tabs (app nav, song index) ---------- */
+.jl-tabs { display: flex; gap: 6px; min-width: 0; }
+.jl-tabs > a, .jl-tabs > button {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: var(--jl-target); padding: 10px 12px;
+  border: 0; border-radius: var(--jl-radius-control); background: transparent;
+  color: var(--jl-muted); font-weight: 600; line-height: var(--jl-leading-control);
+  text-decoration: none; cursor: pointer; white-space: nowrap;
+  transition: background-color var(--jl-motion-feedback) var(--jl-ease);
+}
+.jl-tabs > a:hover, .jl-tabs > button:hover { background: var(--jl-raised); color: var(--jl-ink); }
+.jl-tabs > [aria-current="page"], .jl-tabs > [aria-selected="true"] {
+  color: var(--jl-ink); box-shadow: inset 0 -3px var(--jl-accent);
+}
+/* Vertical index: current gets an edge, a raised row and ink. */
+.jl-tabs.jl-tabs-vertical { flex-direction: column; align-items: stretch; gap: 2px; }
+.jl-tabs.jl-tabs-vertical > a, .jl-tabs.jl-tabs-vertical > button { justify-content: flex-start; text-align: left; border-radius: 0; }
+.jl-tabs.jl-tabs-vertical > [aria-current="page"], .jl-tabs.jl-tabs-vertical > [aria-selected="true"] {
+  background: var(--jl-raised); box-shadow: inset 3px 0 var(--jl-accent);
+}
+.jl-count { font-size: var(--jl-text-caption); font-weight: 600; color: var(--jl-muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- buttons ---------- */
+/* .jl-btn alone is the secondary action: ink on a raised surface. */
+.jl-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--jl-space-2);
+  min-height: var(--jl-target); min-width: var(--jl-target);
+  margin: 0; padding: 9px 15px;
+  border: 1px solid var(--jl-line); border-radius: var(--jl-radius-control);
+  background: var(--jl-raised); color: var(--jl-ink);
+  font-weight: 600; line-height: var(--jl-leading-control); text-align: center; text-decoration: none;
+  cursor: pointer; user-select: none; -webkit-user-select: none;
+  transition: background-color var(--jl-motion-feedback) var(--jl-ease), border-color var(--jl-motion-feedback) var(--jl-ease), box-shadow var(--jl-motion-feedback) var(--jl-ease);
+}
+.jl-btn:hover { background: var(--jl-panel); border-color: var(--jl-accent); }
+.jl-btn:active:not(:disabled) { transform: translateY(1px); }
+.jl-btn-sm { padding: 6px 12px; font-size: var(--jl-text-compact); }
+@media (min-width: 768px) { .jl-btn-sm { min-height: 36px; } }
+
+/* Primary: accent fill, on text. Hover adds an outline, never lowers contrast. */
+.jl-btn-primary { background: var(--jl-accent); border-color: var(--jl-accent); color: var(--jl-on); }
+.jl-btn-primary:hover { background: var(--jl-accent); border-color: var(--jl-accent); box-shadow: 0 0 0 2px var(--jl-panel), 0 0 0 4px var(--jl-accent); }
+
+/* Text / quiet: no box until hovered. */
+.jl-btn-text { background: transparent; border-color: transparent; }
+.jl-btn-text:hover { background: var(--jl-raised); border-color: transparent; }
+
+/* Destructive: the words say it; the heavier ink edge marks it. */
+.jl-btn-danger { background: transparent; border: 2px solid var(--jl-ink); color: var(--jl-ink); }
+.jl-btn-danger:hover { background: var(--jl-raised); border-color: var(--jl-ink); }
+
+/* Icon-only: needs an aria-label. */
+.jl-btn-icon { padding: 0; width: var(--jl-target); flex: none; font-size: 20px; }
+@media (max-width: 767.98px) { .jl-btn-icon { width: 48px; height: 48px; } }
+
+/* Editing In/Out/Marks: 44px targets, raised fill, border; Marks has the accent edge. */
+.jl-btn-edit { min-height: var(--jl-target-edit); padding: 10px 18px; font-size: 15px; }
+.jl-btn-edit.jl-btn-marks { border-color: var(--jl-accent); color: var(--jl-accent); }
+
+/* Disabled keeps ink contrast; the state is the attribute, the look is a dashed edge. */
+.jl-btn:disabled, .jl-btn[aria-disabled="true"] {
+  cursor: default; transform: none; box-shadow: none;
+  background: var(--jl-raised); border: 1px dashed var(--jl-line); color: var(--jl-ink);
+}
+.jl-btn-primary:disabled { background: var(--jl-raised); color: var(--jl-ink); }
+/* Busy keeps its label and adds a progress mark. */
+.jl-btn[aria-busy="true"]::after {
+  content: ""; width: 14px; height: 14px; flex: none;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: jl-spin 800ms linear infinite;
+}
+
+/* Play: rectangular in Signal. */
+.jl-play {
+  display: inline-grid; place-items: center; flex: none;
+  width: var(--jl-target-play); height: var(--jl-target-play); padding: 0; margin: 0;
+  border: 0; border-radius: var(--jl-radius-play);
+  background: var(--jl-accent); color: var(--jl-on); font-size: 22px; cursor: pointer;
+}
+.jl-play:hover { box-shadow: 0 0 0 2px var(--jl-panel), 0 0 0 4px var(--jl-accent); }
+
+/* ---------- segmented control ---------- */
+.jl-seg {
+  display: inline-flex; flex-wrap: wrap; max-width: 100%; gap: 3px; padding: 4px;
+  background: var(--jl-raised); border-radius: var(--jl-radius-control);
+}
+.jl-seg > button, .jl-seg > label {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 36px; padding: 8px 14px; margin: 0;
+  border: 0; border-radius: var(--jl-radius-control); background: transparent;
+  color: var(--jl-muted); font-weight: 600; line-height: var(--jl-leading-control); white-space: nowrap; cursor: pointer;
+}
+.jl-seg > button:hover, .jl-seg > label:hover { color: var(--jl-ink); background: var(--jl-panel); }
+.jl-seg > button[aria-pressed="true"], .jl-seg > button[aria-selected="true"], .jl-seg > label:has(input:checked) {
+  background: var(--jl-panel); color: var(--jl-ink); box-shadow: inset 0 -3px var(--jl-accent);
+}
+.jl-seg > label > input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.jl-seg > label:has(input:focus-visible) { outline: 3px solid var(--jl-accent); outline-offset: 3px; }
+.jl-seg > button:disabled { cursor: default; color: var(--jl-muted); background: transparent; }
+.jl-seg > button[aria-pressed="true"]:disabled { background: var(--jl-panel); color: var(--jl-ink); }
+@media (max-width: 767.98px) { .jl-seg > button, .jl-seg > label { min-height: 48px; } }
+
+/* ---------- fields ---------- */
+/* <label class="jl-field"><span>Name</span><input …></label>. The label stays
+   visible; there are no placeholder examples. */
+.jl-field { display: block; margin: 0 0 var(--jl-space-4); min-width: 0; }
+.jl-field > span:first-child, .jl-field > .jl-label {
+  display: block; margin-bottom: 6px;
+  font-size: var(--jl-text-label); font-weight: 600; line-height: var(--jl-leading-control); color: var(--jl-muted);
+}
+.jl-input,
+.jl-field input:not([type="checkbox"]):not([type="radio"]),
+.jl-field select,
+.jl-field textarea {
+  display: block; width: 100%; min-height: 44px; margin: 0; padding: 10px 12px;
+  border: 1px solid var(--jl-line); border-radius: var(--jl-radius-control);
+  background: var(--jl-bg); color: var(--jl-ink);
+  font-size: 16px; line-height: var(--jl-leading-control);
+}
+.jl-field textarea { min-height: 92px; resize: vertical; line-height: var(--jl-leading-body); }
+.jl-field select { appearance: auto; }
+@media (max-width: 767.98px) {
+  .jl-input, .jl-field input:not([type="checkbox"]):not([type="radio"]), .jl-field select { min-height: 48px; }
+}
+.jl-input:hover, .jl-field :is(input, select, textarea):hover:not(:disabled) { border-color: var(--jl-ink); }
+.jl-input:focus-visible, .jl-field :is(input, select, textarea):focus-visible { border-color: var(--jl-accent); }
+.jl-field :is(input, select, textarea):disabled, .jl-input:disabled {
+  background: var(--jl-raised); border-style: dashed; color: var(--jl-ink); cursor: default; opacity: 1; -webkit-text-fill-color: var(--jl-ink);
+}
+.jl-field :is(input, select, textarea)[aria-invalid="true"] { border: 2px solid var(--jl-ink); }
+
+/* Checkbox / radio row: the whole row is the target. */
+.jl-check {
+  display: flex; align-items: center; gap: var(--jl-space-3);
+  min-height: var(--jl-target); padding: 4px 0; cursor: pointer;
+}
+.jl-check > input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--jl-accent); }
+
+/* Errors sit next to what failed, in ink with a mark, never colour alone. */
+.jl-err { min-height: 0; margin: var(--jl-space-1) 0 var(--jl-space-2); font-size: var(--jl-text-compact); font-weight: 600; color: var(--jl-ink); }
+.jl-err:not(:empty)::before { content: "⚠\FE0E"; display: inline-block; margin-right: 6px; }
+
+/* ---------- surfaces ---------- */
+.jl-panel { background: var(--jl-panel); border-radius: var(--jl-radius-surface); padding: var(--jl-space-5); }
+.jl-rule { border: 0; border-top: 1px solid var(--jl-line); margin: var(--jl-space-6) 0; }
+
+/* A notice row: accent2 edge on raised (a gap, a mode, a stale copy). */
+.jl-notice {
+  display: flex; gap: var(--jl-space-3); align-items: flex-start;
+  padding: 12px 14px; margin: 0 0 var(--jl-space-3);
+  background: var(--jl-raised); border-left: 3px solid var(--jl-accent2); border-radius: 0 var(--jl-radius-row) var(--jl-radius-row) 0;
+  color: var(--jl-ink); font-size: var(--jl-text-compact);
+}
+.jl-notice-strong { color: var(--jl-accent2); font-weight: 600; }
+
+/* ---------- empty / loading ---------- */
+.jl-empty {
+  padding: var(--jl-space-7) var(--jl-space-4); text-align: center;
+  border: 1px dashed var(--jl-line); border-radius: var(--jl-radius-surface);
+  color: var(--jl-muted);
+}
+.jl-empty > strong, .jl-empty > h2 { display: block; color: var(--jl-ink); font-size: var(--jl-text-subheading); font-weight: 600; margin-bottom: var(--jl-space-2); }
+.jl-loading { display: flex; align-items: center; gap: var(--jl-space-3); color: var(--jl-muted); }
+.jl-spinner {
+  width: 22px; height: 22px; flex: none;
+  border: 3px solid var(--jl-line); border-top-color: var(--jl-accent); border-radius: 50%;
+  animation: jl-spin 800ms linear infinite;
+}
+@keyframes jl-spin { to { transform: rotate(360deg); } }
+
+/* ---------- branded dialog (<dialog class="jl-dialog">, showModal) ---------- */
+/* App icon + task title, Cancel and a named action. Escape cancels; a
+   destructive one focuses Cancel first. */
+dialog.jl-dialog {
+  width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - var(--jl-safe-top) - 32px);
+  margin: auto; padding: var(--jl-space-6);
+  border: 1px solid var(--jl-line); border-radius: var(--jl-radius-dialog);
+  background: var(--jl-panel); color: var(--jl-ink); box-shadow: var(--jl-shadow);
+  overflow: auto; overscroll-behavior: contain;
+}
+dialog.jl-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+dialog.jl-dialog[open] { animation: jl-dialog-in var(--jl-motion-panel) var(--jl-ease); }
+@keyframes jl-dialog-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.jl-dialog-head { display: flex; align-items: center; gap: var(--jl-space-3); margin-bottom: var(--jl-space-4); }
+.jl-dialog-head img { width: 32px; height: 32px; flex: none; border-radius: 22%; }
+.jl-dialog-head h2 { font-size: 23px; letter-spacing: -0.02em; }
+.jl-dialog-body > * + * { margin-top: var(--jl-space-3); }
+.jl-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--jl-space-2); margin-top: var(--jl-space-5); }
+.jl-actions > .jl-spacer { flex: 1 1 auto; }
+@media (max-width: 767.98px) {
+  dialog.jl-dialog {
+    margin: auto 0 0; width: 100%; max-width: 100%;
+    border-width: 1px 0 0; border-radius: var(--jl-radius-sheet) var(--jl-radius-sheet) 0 0;
+    padding-bottom: calc(var(--jl-safe-bottom) + var(--jl-space-3));
+  }
+}
+
+/* ---------- sheet (a larger branded surface: forms, detail) ---------- */
+/* <div class="jl-sheet" hidden><div class="jl-scrim"></div><div class="jl-sheet-body" role="dialog" aria-modal="true">…
+   Desktop: a centred panel. Phone: a tall sheet from the bottom, clear of the clock. */
+.jl-sheet { position: fixed; inset: 0; z-index: 40; }
+.jl-scrim { position: absolute; inset: 0; background: var(--jl-scrim); }
+.jl-sheet-body {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  max-height: calc(100dvh - var(--jl-safe-top) - 8px); overflow: auto; overscroll-behavior: contain;
+  padding: var(--jl-space-5) var(--jl-gutter) calc(var(--jl-safe-bottom) + var(--jl-space-4));
+  background: var(--jl-panel); color: var(--jl-ink);
+  border-top: 1px solid var(--jl-line); border-radius: var(--jl-radius-sheet) var(--jl-radius-sheet) 0 0;
+}
+@media (min-width: 768px) {
+  .jl-sheet-body {
+    top: max(5vh, calc(var(--jl-safe-top) + 16px)); bottom: auto; left: 50%; right: auto; transform: translateX(-50%);
+    width: min(720px, calc(100vw - 48px)); max-height: 90vh;
+    padding: var(--jl-space-6) var(--jl-space-7) var(--jl-space-7);
+    border: 1px solid var(--jl-line); border-radius: var(--jl-radius-dialog); box-shadow: var(--jl-shadow);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .jl-sheet:not([hidden]) .jl-sheet-body { animation: jl-sheet-up var(--jl-motion-panel) var(--jl-ease); }
+  @keyframes jl-sheet-up { from { opacity: 0.6; translate: 0 24px; } to { opacity: 1; translate: 0 0; } }
+}
+
+/* ---------- toast ---------- */
+/* Above the app's bottom bar and the home indicator, never over them. */
+.jl-toast {
+  position: fixed; z-index: 60; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--jl-bottom-bar) + var(--jl-safe-bottom) + 12px);
+  width: max-content; max-width: calc(100vw - 32px);
+  padding: 13px 16px; border-left: 3px solid var(--jl-accent); border-radius: var(--jl-radius-surface);
+  background: var(--jl-panel); color: var(--jl-ink); box-shadow: var(--jl-shadow);
+  font-size: 15px; font-weight: 500;
+}
+.jl-toast[data-kind="error"] { border-left-color: var(--jl-ink); }
+.jl-toast[data-kind="error"]::before { content: "⚠\FE0E"; margin-right: 8px; }
+
+/* ---------- transport ---------- */
+/* One owner of playback. data-state: idle | playing | paused | loading | error. */
+.jl-transport {
+  display: flex; align-items: center; gap: 18px; width: 100%; min-height: 92px;
+  padding: 14px 18px; background: var(--jl-panel); border-top: 3px solid var(--jl-accent);
+}
+.jl-transport-track { display: flex; flex-direction: column; min-width: 120px; max-width: 250px; }
+.jl-transport-track b { font-size: var(--jl-text-body); line-height: 1.25; }
+.jl-transport-track span { margin-top: 4px; font-size: var(--jl-text-label); color: var(--jl-muted); }
+.jl-transport-time { flex: 1; min-width: 100px; font-size: var(--jl-text-label); font-variant-numeric: tabular-nums; }
+.jl-transport-time > .jl-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
+.jl-transport-time > .jl-row > :last-child { color: var(--jl-muted); }
+.jl-transport[data-state="loading"] .jl-play::after { content: ""; position: absolute; }
+.jl-transport-status { font-size: var(--jl-text-label); color: var(--jl-ink); }
+@media (max-width: 767.98px) {
+  .jl-transport { display: grid; grid-template-columns: 56px minmax(0, 1fr) 48px; gap: 8px 12px; padding: 12px 16px; min-height: 72px; }
+  .jl-transport .jl-play { grid-row: 1 / 3; }
+  .jl-transport-track { grid-column: 2; min-width: 0; max-width: none; }
+  .jl-transport-track b { font-size: var(--jl-text-caption); }
+  .jl-transport-track span { font-size: var(--jl-text-micro); margin-top: 2px; }
+  .jl-transport-time { grid-column: 2 / 4; grid-row: 2; font-size: var(--jl-text-micro); min-height: 48px; }
+}
+
+/* Scrubber: the bar can be thin, the hit region is 48px on a phone. No seek on
+   pointerdown; horizontal intent then release commits (the app's script). */
+.jl-scrub { position: relative; height: 24px; display: flex; align-items: center; touch-action: pan-y; overscroll-behavior: none; cursor: pointer; }
+.jl-scrub-bar { position: relative; width: 100%; height: 4px; background: var(--jl-line); }
+.jl-scrub-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--jl-accent); }
+.jl-scrub-fill::after { content: ""; position: absolute; right: -5px; top: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--jl-accent); }
+@media (max-width: 767.98px) { .jl-scrub { height: 48px; } }
+
+/* Waveform wrapper + playhead label (accent2 fill, on text). */
+.jl-wave { position: relative; padding-top: 24px; touch-action: pan-y; overscroll-behavior: none; }
+.jl-wave svg, .jl-wave canvas { display: block; width: 100%; height: 80px; }
+.jl-playhead { position: absolute; top: 23px; bottom: 0; width: 2px; background: var(--jl-accent2); pointer-events: none; }
+.jl-playhead > span {
+  position: absolute; left: 0; bottom: 100%; padding: 2px 6px; white-space: nowrap;
+  background: var(--jl-accent2); color: var(--jl-on); font-size: var(--jl-text-micro); font-variant-numeric: tabular-nums;
+}
+
+/* ---------- take row ---------- */
+/* data-state: idle | playing | selected. Playing: accent edge, raised, "Playing"
+   + pause glyph as status. Selected: accent2 edge and a check. Both can hold. */
+.jl-take { padding: 12px 16px; margin: 10px 0; background: var(--jl-panel); border-left: 3px solid transparent; }
+.jl-take-head { display: flex; align-items: center; gap: var(--jl-space-3); min-height: 32px; }
+.jl-take-head h3 { font-size: var(--jl-text-body); font-weight: 600; }
+.jl-take-symbol { width: 22px; flex: none; color: var(--jl-accent); font-size: 20px; text-align: center; }
+.jl-take-status { font-size: var(--jl-text-caption); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--jl-accent); }
+.jl-take-time { font-size: var(--jl-text-label); color: var(--jl-muted); font-variant-numeric: tabular-nums; }
+.jl-take[data-state~="playing"] { background: var(--jl-raised); border-left-color: var(--jl-accent); }
+.jl-take[data-state~="selected"] { border-left-color: var(--jl-accent2); }
+.jl-take[data-state~="selected"] .jl-take-status { color: var(--jl-accent2); }
+
+/* ---------- score 1–10 + My pick ---------- */
+.jl-score-label { margin: 0 0 var(--jl-space-2); font-size: var(--jl-text-label); font-weight: 600; color: var(--jl-muted); }
+.jl-score { display: grid; grid-template-columns: repeat(10, minmax(40px, 1fr)); gap: 6px; }
+.jl-score > button {
+  position: relative; min-width: 40px; min-height: 40px; padding: 0; margin: 0;
+  border: 1px solid var(--jl-line); border-radius: var(--jl-radius-score);
+  background: var(--jl-raised); color: var(--jl-ink); font-size: var(--jl-text-compact); font-weight: 600;
+  font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.jl-score > button:hover { background: var(--jl-panel); border: 2px solid var(--jl-accent); }
+.jl-score > button:focus-visible { outline-offset: 2px; }
+.jl-score > button[aria-pressed="true"] {
+  background: var(--jl-accent); color: var(--jl-on); border: 2px solid var(--jl-accent); border-radius: 50%; font-weight: 700;
+}
+.jl-score > button[aria-pressed="true"]::after {
+  content: ""; position: absolute; left: calc(50% - 7px); bottom: 5px; width: 14px; height: 2px; background: var(--jl-on);
+}
+.jl-score[aria-busy="true"] > button { cursor: progress; }
+@media (max-width: 767.98px) {
+  .jl-score { grid-template-columns: repeat(5, minmax(48px, 1fr)); }
+  .jl-score > button { min-width: 48px; min-height: 48px; font-size: var(--jl-text-body); }
+}
+.jl-pick {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--jl-space-2);
+  min-height: 56px; min-width: 190px; padding: 14px 24px; margin: 0;
+  border: 2px solid var(--jl-accent); border-radius: var(--jl-radius-control);
+  background: var(--jl-panel); color: var(--jl-accent); font-size: var(--jl-text-subheading); font-weight: 700; cursor: pointer;
+}
+.jl-pick[aria-pressed="true"] { background: var(--jl-accent); color: var(--jl-on); }
+.jl-pick[aria-busy="true"] { cursor: progress; }
+@media (max-width: 767.98px) { .jl-pick { width: 100%; } }
+
+/* ---------- cover card ---------- */
+/* Art keeps its own aspect (square, or 16:9 for film), contained, no overlay;
+   text sits outside the image. */
+.jl-cover { display: block; color: var(--jl-ink); text-decoration: none; }
+.jl-cover-art { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--jl-raised); border-radius: var(--jl-radius-surface); }
+.jl-cover-art.jl-film { aspect-ratio: 16 / 9; }
+.jl-cover-meta { display: flex; align-items: flex-start; gap: var(--jl-space-3); margin-top: var(--jl-space-3); }
+.jl-cover-meta h3 { font-size: var(--jl-text-subheading); line-height: 1.13; }
+.jl-cover-meta p { margin-top: 4px; font-size: var(--jl-text-label); color: var(--jl-muted); }
+a.jl-cover:hover .jl-cover-meta h3 { text-decoration: underline; text-underline-offset: 3px; }
+.jl-cover[aria-busy="true"] .jl-cover-art { outline: 3px solid var(--jl-accent); outline-offset: -3px; }
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .jl-btn:active:not(:disabled) { transform: none; }
+  .jl-spinner { border-top-color: var(--jl-accent); border-right-color: var(--jl-accent); }
+}

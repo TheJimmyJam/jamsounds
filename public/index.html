@@ -1,128 +1,168 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-app="jamsounds">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JamSounds — Tailored music for your projects</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=2" />
-  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=2" />
-  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2" />
-  <link rel="stylesheet" href="styles.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- Theme before first paint, then the picker; both blocking, before the app's own scripts. -->
+  <script src="/assets/jam-life/theme-init.js" data-app="jamsounds" data-canvas-light="#F1F4F5" data-canvas-dark="#0C1216"></script>
+  <script src="/assets/jam-life/switcher.js"></script>
+  <title>JamSounds</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=2" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=2" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
+  <link rel="stylesheet" href="/assets/jam-life/tokens.css" />
+  <link rel="stylesheet" href="/assets/jam-life/base.css" />
+  <link rel="stylesheet" href="/assets/jam-life/components.css" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/assets/jam-life/prefs.js" defer></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-icon brand-icon-img">
-        <img src="brand-icon.png?v=2" alt="" width="32" height="32" />
-      </div>
-      <div>
-        <h1>JamSounds <span class="brand-sub">studio</span></h1>
-      </div>
-    </div>
-    <div class="status">
-      <div class="profile-picker" title="Switch profile — each profile has its own library and personas">
-        <span class="profile-label">Profile</span>
-        <select id="profile-select" class="profile-select">
-          <option value="jimmy">Jimmy</option>
-        </select>
-      </div>
-      <span id="credits-pill" class="pill">— credits</span>
-      <span id="tracks-pill" class="pill">— saved</span>
+  <header class="jl-header bar">
+    <jam-switcher app="jamsounds"></jam-switcher>
+    <nav class="jl-tabs views" id="views" aria-label="JamSounds">
+      <a href="#/library" data-view="library">Library</a>
+      <a href="#/create" data-view="create">Create</a>
+      <a href="#/personas" data-view="personas">Personas</a>
+    </nav>
+    <span class="jl-spacer"></span>
+    <div class="jl-header-actions">
+      <button type="button" class="jl-btn jl-btn-text jl-btn-icon look" id="look-btn" aria-label="Appearance"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 2.5a7.5 7.5 0 0 1 0 15z" fill="currentColor"/></svg></button>
     </div>
   </header>
 
-  <main class="layout">
-    <section class="panel">
-      <p class="section-label">Project brief <span class="optional">— optional</span></p>
-      <textarea id="project-brief" rows="3" placeholder="Describe the project this music is for. For example: 'A meditation app for dog walkers — calming background music designed to loop while users track their walks.'"></textarea>
-      <button id="translate-btn" class="btn-secondary">
-        <span class="btn-icon">✨</span>
-        Fill fields with Claude
-      </button>
-      <p id="translate-status" class="status-line"></p>
-
-      <div class="divider"></div>
-
-      <p class="section-label">Music brief</p>
-
-      <div class="grid-2">
-        <div class="field">
-          <label for="title">Title</label>
-          <input id="title" type="text" maxlength="100" placeholder="Untitled" />
-        </div>
-        <div class="field">
-          <label for="model">Model</label>
-          <select id="model">
-            <optgroup label="Current">
-              <option value="V6">V6 — newest, recommended</option>
-              <option value="V6_WILD">V6 Wild — experimental</option>
-              <option value="V6_MINI">V6 Mini — lightweight</option>
-            </optgroup>
-            <optgroup label="Deprecated">
-              <option value="V5_5">V5.5</option>
-              <option value="V5">V5</option>
-              <option value="V4_5PLUS">V4.5 Plus</option>
-              <option value="V4_5ALL">V4.5 All</option>
-              <option value="V4_5">V4.5</option>
-              <option value="V4">V4</option>
-            </optgroup>
+  <main class="layout" id="layout" data-view="library">
+    <aside class="rail" aria-label="Profile and top played">
+      <div class="rail-head">
+        <label class="jl-field profile-field">
+          <span>Profile</span>
+          <select id="profile-select" class="profile-select">
+            <option value="jimmy">Jimmy</option>
           </select>
-        </div>
+        </label>
+        <h1>Library</h1>
+        <p class="stats jl-num"><span id="tracks-pill">— saved</span><span id="credits-pill">— credits</span></p>
       </div>
-
-      <div class="field" id="duration-field">
-        <label for="duration">Length <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— V6 series and V5.5 only. Unchecked = let Suno decide.</span></label>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <input id="duration-enabled" type="checkbox" style="margin:0;width:auto;" />
-          <input id="duration" type="range" min="10" max="360" step="5" value="180" style="flex:1;" disabled />
-          <span id="duration-out" style="font-size:11px;min-width:44px;text-align:right;">3:00</span>
+      <section class="rail-top" aria-labelledby="top-played-title">
+        <div class="section-head">
+          <h2 class="jl-eyebrow" id="top-played-title">Top played</h2>
+          <span id="top-played-count" class="count jl-num">—</span>
         </div>
-        <p id="duration-note" class="hint" style="margin-top:4px;font-weight:400;text-transform:none;letter-spacing:0;"></p>
+        <div id="top-played-list" class="top-list">
+          <p class="empty-hint">No plays yet</p>
+        </div>
+      </section>
+    </aside>
+
+    <section class="panel now" aria-labelledby="now-title">
+      <h2 class="jl-eyebrow" id="now-title">Now playing</h2>
+      <div id="player-empty" class="empty">
+        <p>Nothing playing</p>
       </div>
-
-      <div class="field" style="display:flex;gap:6px;align-items:flex-end;">
-        <div style="flex:1;">
-          <label for="style">Style</label>
-          <input id="style" type="text" maxlength="1000" placeholder="ambient electronic, lo-fi, warm pads, 80 BPM" />
-        </div>
-        <button id="boost-style-btn" class="btn-secondary" style="margin-top:0;height:32px;white-space:nowrap;" title="Expand a terse style line into a fuller one">Boost</button>
-      </div>
-
-      <div class="field" style="display:flex;gap:6px;align-items:flex-end;">
-        <div style="flex:1;">
-          <label for="sounds-like">Sounds like <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— reference song (e.g. "Dylan LeBlanc Coyote")</span></label>
-          <input id="sounds-like" type="text" placeholder="Artist - Song name" />
-        </div>
-        <button id="sounds-like-btn" class="btn-secondary" style="margin-top:0;height:32px;white-space:nowrap;">Fill style</button>
-      </div>
-      <p id="sounds-like-status" class="status-line"></p>
-
-      <div class="field">
-        <label>Or upload an MP3 reference <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— Suno will mimic its feel directly (≤6MB, trim if needed)</span></label>
-        <div id="drop-zone" class="drop-zone">
-          <input id="ref-file" type="file" accept="audio/mpeg,audio/mp3,.mp3" style="display:none;" />
-          <span id="drop-zone-label">Drag MP3 here or click to choose</span>
-        </div>
-        <div id="ref-loaded" class="hidden" style="margin-top:8px;background:var(--surface-2);border-radius:var(--radius-sm);padding:10px;">
-          <p style="margin:0 0 4px;font-size:12px;"><span id="ref-name">—</span> <span class="hint" id="ref-size">—</span></p>
-          <audio id="ref-preview" controls preload="metadata" style="height:30px;margin-top:4px;"></audio>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-            <label for="audio-weight-slider" style="font-size:11px;color:var(--text-2);">Mimic strength</label>
-            <input id="audio-weight-slider" type="range" min="0" max="1" step="0.05" value="0.65" style="flex:1;" />
-            <span id="audio-weight-out" style="font-size:11px;min-width:30px;">0.65</span>
-            <button id="ref-clear" class="btn-secondary" style="margin:0;padding:4px 10px;font-size:11px;">Clear</button>
+      <div id="player" class="player hidden">
+        <p id="player-title" class="player-title">—</p>
+        <p id="player-meta" class="player-meta">—</p>
+        <audio id="audio-el" controls preload="metadata"></audio>
+        <div class="player-actions">
+          <div class="jl-seg versions" role="group" aria-label="Version">
+            <button type="button" class="version-btn active" data-version="0" aria-pressed="true">v1</button>
+            <button type="button" class="version-btn" data-version="1" aria-pressed="false">v2</button>
           </div>
-          <div style="display:flex;gap:6px;margin-top:8px;">
-            <button id="add-vocals-btn" class="btn-secondary" style="margin:0;flex:1;padding:4px 10px;font-size:11px;" title="Sing the lyrics above over this uploaded instrumental">Add vocals to this</button>
-            <button id="add-instrumental-btn" class="btn-secondary" style="margin:0;flex:1;padding:4px 10px;font-size:11px;" title="Build an arrangement under this uploaded vocal">Add instrumental to this</button>
+          <div class="tools">
+            <button type="button" id="save-btn" class="jl-btn jl-btn-sm icon-btn">Save</button>
+            <button type="button" id="save-persona-btn" class="jl-btn jl-btn-sm icon-btn">Persona</button>
+            <button type="button" id="publish-btn" class="jl-btn jl-btn-sm icon-btn">Publish</button>
+            <button type="button" id="extend-btn" class="jl-btn jl-btn-sm icon-btn">Extend</button>
+            <button type="button" id="wav-btn" class="jl-btn jl-btn-sm icon-btn">WAV</button>
+            <button type="button" id="stems-btn" class="jl-btn jl-btn-sm icon-btn">Stems</button>
+            <button type="button" id="lyrics-btn" class="jl-btn jl-btn-sm icon-btn">Timings</button>
+            <a id="download-link" class="jl-btn jl-btn-sm icon-btn" download>Download</a>
           </div>
         </div>
-        <p id="ref-status" class="status-line"></p>
+        <p id="track-tools-status" class="status-line" role="status"></p>
+        <div id="stems-list" class="stems-list hidden"></div>
+
+        <div id="persona-form" class="persona-form hidden">
+          <h3 class="jl-eyebrow">Save vocal as persona</h3>
+          <div class="grid-2">
+            <div class="field">
+              <label for="persona-name">Name</label>
+              <input id="persona-name" type="text" maxlength="60" />
+            </div>
+            <div class="field">
+              <span class="lbl" id="persona-window-label">Vocal window (10–30s)</span>
+              <div class="window-row" role="group" aria-labelledby="persona-window-label">
+                <input id="persona-start" type="number" min="0" step="1" value="0" inputmode="numeric" aria-label="Start, seconds" />
+                <span class="muted">to</span>
+                <input id="persona-end" type="number" min="10" step="1" value="30" inputmode="numeric" aria-label="End, seconds" />
+                <span class="muted">sec</span>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label for="persona-description">Description</label>
+            <textarea id="persona-description" rows="2" maxlength="500"></textarea>
+          </div>
+          <div class="row-actions">
+            <button type="button" id="persona-form-cancel" class="jl-btn">Cancel</button>
+            <button type="button" id="persona-form-save" class="jl-btn jl-btn-primary">Save persona</button>
+          </div>
+          <p id="persona-form-status" class="status-line" role="status"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel list" aria-labelledby="library-title">
+      <div class="section-head">
+        <h2 class="jl-eyebrow" id="library-title">Tracks</h2>
+        <span id="library-count" class="count jl-num">—</span>
+      </div>
+      <div id="library-list" class="library-list">
+        <p class="empty-hint">No saved tracks yet</p>
+      </div>
+    </section>
+
+    <section class="panel personas" aria-labelledby="personas-title">
+      <div class="section-head">
+        <h2 id="personas-title">Personas</h2>
+        <span id="personas-count" class="count jl-num">—</span>
+      </div>
+      <div id="personas-list" class="library-list">
+        <p class="empty-hint">No personas yet</p>
+      </div>
+      <h3 class="jl-eyebrow register-title">Register a Suno Voice</h3>
+      <div class="register-row">
+        <div class="field">
+          <label for="voice-id-input">Voice ID</label>
+          <input id="voice-id-input" type="text" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="voice-name-input">Label</label>
+          <input id="voice-name-input" type="text" maxlength="60" />
+        </div>
+        <button type="button" id="voice-register-btn" class="jl-btn">Add</button>
+      </div>
+      <p id="voice-register-status" class="status-line" role="status"></p>
+    </section>
+
+    <section class="panel create" aria-labelledby="create-title">
+      <h2 id="create-title">Create</h2>
+
+      <div class="field">
+        <label for="title">Title</label>
+        <input id="title" type="text" maxlength="100" />
       </div>
 
       <div class="field">
-        <label for="prompt">Lyrics / prompt <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— if vocals are on, this is sung VERBATIM. Use [Verse] / [Chorus] tags.</span></label>
-        <textarea id="prompt" rows="6" maxlength="5000" placeholder="[Verse 1]&#10;Actual words to be sung, line by line&#10;&#10;[Chorus]&#10;The hook&#10;&#10;..."></textarea>
+        <label for="style">Style</label>
+        <div class="inline">
+          <input id="style" type="text" maxlength="1000" />
+          <button type="button" id="boost-style-btn" class="jl-btn">Boost</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="prompt">Lyrics</label>
+        <textarea id="prompt" rows="7" maxlength="5000"></textarea>
       </div>
 
       <div class="grid-2">
@@ -134,39 +174,65 @@
           </select>
         </div>
         <div class="field">
-          <label for="negative-tags">Avoid (negative tags)</label>
-          <input id="negative-tags" type="text" placeholder="heavy metal, vocals" />
+          <label for="negative-tags">Avoid</label>
+          <input id="negative-tags" type="text" />
         </div>
       </div>
 
-      <div class="field" style="background:var(--surface-2);border-radius:var(--radius-sm);padding:10px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <input id="duet-mode" type="checkbox" style="margin:0;width:auto;" />
-          <label for="duet-mode" style="margin:0;cursor:pointer;">Duet mode <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— generate two parallel stems, one per voice (~16 credits total)</span></label>
+      <div class="grid-2">
+        <div class="field">
+          <label for="model">Model</label>
+          <select id="model">
+            <optgroup label="Current">
+              <option value="V6">V6</option>
+              <option value="V6_WILD">V6 Wild</option>
+              <option value="V6_MINI">V6 Mini</option>
+            </optgroup>
+            <optgroup label="Deprecated">
+              <option value="V5_5">V5.5</option>
+              <option value="V5">V5</option>
+              <option value="V4_5PLUS">V4.5 Plus</option>
+              <option value="V4_5ALL">V4.5 All</option>
+              <option value="V4_5">V4.5</option>
+              <option value="V4">V4</option>
+            </optgroup>
+          </select>
         </div>
-        <div id="duet-fields" class="hidden" style="margin-top:10px;">
+        <div class="field len" id="duration-field">
+          <label class="jl-check len-check"><input id="duration-enabled" type="checkbox" /><span>Length</span></label>
+          <div class="len-row">
+            <input id="duration" type="range" min="10" max="360" step="5" value="180" aria-label="Length" disabled />
+            <output id="duration-out" for="duration" class="jl-num">3:00</output>
+          </div>
+          <p id="duration-note" class="note"></p>
+        </div>
+      </div>
+
+      <div class="box">
+        <label class="jl-check"><input id="duet-mode" type="checkbox" /><span>Duet</span></label>
+        <div id="duet-fields" class="hidden">
           <div class="grid-2">
-            <div class="field" style="margin-bottom:6px;">
-              <label for="duet-name-a">Voice A name</label>
-              <input id="duet-name-a" type="text" maxlength="40" value="Jimmy" placeholder="Jimmy" />
+            <div class="field">
+              <label for="duet-name-a">Voice A</label>
+              <input id="duet-name-a" type="text" maxlength="40" value="Jimmy" />
             </div>
-            <div class="field" style="margin-bottom:6px;">
-              <label for="duet-name-b">Voice B name</label>
-              <input id="duet-name-b" type="text" maxlength="40" value="Megi" placeholder="Megi" />
+            <div class="field">
+              <label for="duet-name-b">Voice B</label>
+              <input id="duet-name-b" type="text" maxlength="40" value="Megi" />
             </div>
           </div>
           <div class="grid-2">
-            <div class="field" style="margin-bottom:6px;">
+            <div class="field">
               <label for="duet-persona-a">Voice A persona</label>
               <select id="duet-persona-a"><option value="">None</option></select>
             </div>
-            <div class="field" style="margin-bottom:6px;">
+            <div class="field">
               <label for="duet-persona-b">Voice B persona</label>
               <select id="duet-persona-b"><option value="">None</option></select>
             </div>
           </div>
           <div class="grid-2">
-            <div class="field" style="margin-bottom:0;">
+            <div class="field">
               <label for="duet-gender-a">Voice A gender</label>
               <select id="duet-gender-a">
                 <option value="">n/a</option>
@@ -174,7 +240,7 @@
                 <option value="f">Female</option>
               </select>
             </div>
-            <div class="field" style="margin-bottom:0;">
+            <div class="field">
               <label for="duet-gender-b">Voice B gender</label>
               <select id="duet-gender-b">
                 <option value="">n/a</option>
@@ -183,24 +249,67 @@
               </select>
             </div>
           </div>
-          <p class="hint" style="margin-top:8px;font-weight:400;text-transform:none;letter-spacing:0;">Tag lines in your lyrics so we can split them: <code>[Verse 1: Jimmy]</code> for whole sections, <code>(Megi) line text</code> for individual lines. Untagged lines and "both/harmonized" sections go to both stems.</p>
+          <p class="tags"><span class="muted">Tags</span> <code>[Verse 1: Jimmy]</code> <code>(Megi) line</code></p>
         </div>
       </div>
 
-      <details class="advanced">
-        <summary>Advanced (weights, vocal gender, persona)</summary>
+      <details class="more">
+        <summary>Brief</summary>
+        <div class="field">
+          <label for="project-brief">Project brief</label>
+          <textarea id="project-brief" rows="3"></textarea>
+        </div>
+        <button type="button" id="translate-btn" class="jl-btn">Fill fields with Claude</button>
+        <p id="translate-status" class="status-line" role="status"></p>
+      </details>
+
+      <details class="more">
+        <summary>Reference</summary>
+        <div class="field">
+          <label for="sounds-like">Sounds like</label>
+          <div class="inline">
+            <input id="sounds-like" type="text" />
+            <button type="button" id="sounds-like-btn" class="jl-btn">Fill style</button>
+          </div>
+        </div>
+        <p id="sounds-like-status" class="status-line" role="status"></p>
+
+        <div class="field">
+          <span class="lbl">MP3 reference (6MB max)</span>
+          <input id="ref-file" type="file" accept="audio/mpeg,audio/mp3,.mp3" hidden />
+          <button type="button" id="drop-zone" class="drop-zone"><span id="drop-zone-label">Choose or drop an MP3</span></button>
+          <div id="ref-loaded" class="ref-loaded hidden">
+            <p class="ref-name"><span id="ref-name">—</span> <span class="muted jl-num" id="ref-size">—</span></p>
+            <audio id="ref-preview" controls preload="metadata"></audio>
+            <div class="len-row">
+              <label for="audio-weight-slider" class="lbl-inline">Mimic strength</label>
+              <input id="audio-weight-slider" type="range" min="0" max="1" step="0.05" value="0.65" />
+              <output id="audio-weight-out" for="audio-weight-slider" class="jl-num">0.65</output>
+            </div>
+            <div class="row-actions">
+              <button type="button" id="add-vocals-btn" class="jl-btn jl-btn-sm">Add vocals to this</button>
+              <button type="button" id="add-instrumental-btn" class="jl-btn jl-btn-sm">Add instrumental to this</button>
+              <button type="button" id="ref-clear" class="jl-btn jl-btn-sm jl-btn-text">Clear</button>
+            </div>
+          </div>
+          <p id="ref-status" class="status-line" role="status"></p>
+        </div>
+      </details>
+
+      <details class="more">
+        <summary>Advanced</summary>
         <div class="grid-3">
           <div class="field">
-            <label for="style-weight">Style wt</label>
-            <input id="style-weight" type="number" step="0.05" min="0" max="1" value="0.65" />
+            <label for="style-weight">Style weight</label>
+            <input id="style-weight" type="number" step="0.05" min="0" max="1" value="0.65" inputmode="decimal" />
           </div>
           <div class="field">
             <label for="weirdness">Weirdness</label>
-            <input id="weirdness" type="number" step="0.05" min="0" max="1" value="0.5" />
+            <input id="weirdness" type="number" step="0.05" min="0" max="1" value="0.5" inputmode="decimal" />
           </div>
           <div class="field">
-            <label for="audio-weight">Audio wt</label>
-            <input id="audio-weight" type="number" step="0.05" min="0" max="1" value="0.65" />
+            <label for="audio-weight">Audio weight</label>
+            <input id="audio-weight" type="number" step="0.05" min="0" max="1" value="0.65" inputmode="decimal" />
           </div>
         </div>
         <div class="grid-2">
@@ -213,153 +322,51 @@
             </select>
           </div>
           <div class="field">
-            <label for="persona-select">Persona / Voice <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— reuse a saved voice</span></label>
+            <label for="persona-select">Persona or Voice</label>
             <select id="persona-select">
               <option value="">None</option>
             </select>
-            <p id="persona-mode-note" class="hint" style="margin-top:4px;font-weight:400;text-transform:none;letter-spacing:0;"></p>
+            <p id="persona-mode-note" class="note"></p>
           </div>
         </div>
       </details>
 
-      <button id="generate-btn" class="btn-primary">
-        <span class="btn-icon">▶</span>
+      <button type="button" id="generate-btn" class="jl-btn jl-btn-primary generate">
         <span id="generate-label">Generate · ~8 credits</span>
       </button>
-      <p id="generate-status" class="status-line"></p>
-    </section>
-
-    <section class="results">
-      <div class="panel">
-        <p class="section-label">Now playing</p>
-        <div id="player-empty" class="empty">
-          <p>Generate a track to start.</p>
-          <p class="hint">Suno returns 2 versions per generation. Click v1 / v2 to switch.</p>
-        </div>
-        <div id="player" class="player hidden">
-          <p id="player-title" class="player-title">—</p>
-          <p id="player-meta" class="player-meta">—</p>
-          <audio id="audio-el" controls preload="metadata"></audio>
-          <div class="player-actions">
-            <button class="version-btn active" data-version="0">v1</button>
-            <button class="version-btn" data-version="1">v2</button>
-            <button id="save-btn" class="icon-btn" title="Save to library">♡</button>
-            <button id="save-persona-btn" class="icon-btn" title="Save vocal as persona">👤</button>
-            <button id="publish-btn" class="icon-btn" title="Publish to JamPlays">🚀</button>
-            <button id="extend-btn" class="icon-btn" title="Extend this track using its original settings">⏩</button>
-            <button id="wav-btn" class="icon-btn" title="Convert to WAV">WAV</button>
-            <button id="stems-btn" class="icon-btn" title="Separate into stems">🎚</button>
-            <button id="lyrics-btn" class="icon-btn" title="Download word-level lyric timings as JSON">⏱</button>
-            <a id="download-link" class="icon-btn" title="Download" download>↓</a>
-          </div>
-          <p id="track-tools-status" class="status-line"></p>
-          <div id="stems-list" class="hidden" style="margin-top:8px;background:var(--surface-2);border-radius:var(--radius-sm);padding:10px;"></div>
-
-          <div id="persona-form" class="persona-form hidden">
-            <p class="section-label" style="margin: 12px 0 8px;">Save vocal as persona</p>
-            <div class="grid-2">
-              <div class="field">
-                <label for="persona-name">Name</label>
-                <input id="persona-name" type="text" maxlength="60" placeholder="Megi" />
-              </div>
-              <div class="field">
-                <label>Vocal window <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— pick a 10–30s span of clean singing</span></label>
-                <div style="display:flex;gap:6px;align-items:center;">
-                  <input id="persona-start" type="number" min="0" step="1" value="0" style="width:70px;" />
-                  <span class="hint">to</span>
-                  <input id="persona-end" type="number" min="10" step="1" value="30" style="width:70px;" />
-                  <span class="hint">sec</span>
-                </div>
-              </div>
-            </div>
-            <div class="field">
-              <label for="persona-description">Description <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— Suno requires this</span></label>
-              <textarea id="persona-description" rows="2" maxlength="500" placeholder="Intimate breathy female folk vocal, warm and slightly melancholic, slow tempo, soft delivery."></textarea>
-            </div>
-            <div style="display:flex;gap:8px;">
-              <button id="persona-form-save" class="btn-primary" style="flex:1;">Save persona</button>
-              <button id="persona-form-cancel" class="btn-secondary" style="margin:0;">Cancel</button>
-            </div>
-            <p id="persona-form-status" class="status-line"></p>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="library-header">
-          <p class="section-label" style="margin: 0;">Library</p>
-          <span id="library-count" class="hint">—</span>
-        </div>
-        <div id="library-list" class="library-list">
-          <p class="empty-hint">No saved tracks yet.</p>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="library-header">
-          <p class="section-label" style="margin: 0;">Top played</p>
-          <span id="top-played-count" class="hint">—</span>
-        </div>
-        <p class="hint" style="margin: 4px 0 8px;">Internal stats — counted each time you press play on a track.</p>
-        <div id="top-played-list" class="library-list">
-          <p class="empty-hint">No plays yet.</p>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="library-header">
-          <p class="section-label" style="margin: 0;">Personas</p>
-          <span id="personas-count" class="hint">—</span>
-        </div>
-        <p class="hint" style="margin: 4px 0 8px;">A <strong>persona</strong> is a voice profile minted from a song you generated — use the 👤 button in the player. A <strong>Voice</strong> is your own voice, recorded and verified in Suno's app; the API can't create one, so paste its ID below to use it here.</p>
-        <div id="personas-list" class="library-list">
-          <p class="empty-hint">No personas yet.</p>
-        </div>
-        <div style="display:flex;gap:6px;margin-top:8px;align-items:flex-end;">
-          <div class="field" style="flex:1;margin-bottom:0;">
-            <label for="voice-id-input">Register a Suno Voice ID</label>
-            <input id="voice-id-input" type="text" placeholder="voice id from suno.com" />
-          </div>
-          <div class="field" style="width:110px;margin-bottom:0;">
-            <label for="voice-name-input">Label</label>
-            <input id="voice-name-input" type="text" maxlength="60" placeholder="My voice" />
-          </div>
-          <button id="voice-register-btn" class="btn-secondary" style="margin:0;height:32px;white-space:nowrap;">Add</button>
-        </div>
-        <p id="voice-register-status" class="status-line"></p>
-      </div>
+      <p id="generate-status" class="status-line" role="status"></p>
     </section>
   </main>
 
-  <!-- Publish to JamPlays modal -->
-  <div id="publish-modal" class="modal hidden">
-    <div class="modal-backdrop" data-publish-close></div>
-    <div class="modal-card">
-      <div class="modal-header">
-        <p class="section-label" style="margin:0;">Publish to JamPlays</p>
-        <button class="modal-close" data-publish-close>×</button>
+  <!-- Publish to JamPlays -->
+  <div id="publish-modal" class="jl-sheet modal hidden">
+    <div class="jl-scrim" data-publish-close></div>
+    <div class="jl-sheet-body" role="dialog" aria-modal="true" aria-labelledby="publish-title" tabindex="-1">
+      <div class="sheet-head">
+        <h2 id="publish-title">Publish to JamPlays</h2>
+        <button type="button" class="jl-btn jl-btn-text modal-close" data-publish-close>Close</button>
       </div>
-      <p class="hint" id="publish-source" style="margin: 4px 0 12px;">—</p>
+      <p class="muted" id="publish-source">—</p>
 
       <div class="field">
         <label for="publish-album">Album</label>
         <select id="publish-album"></select>
       </div>
 
-      <div id="publish-new-album-fields" class="hidden" style="background:var(--surface-2);border-radius:var(--radius-sm);padding:10px;margin-bottom:8px;">
+      <div id="publish-new-album-fields" class="box hidden">
         <div class="field">
           <label for="publish-new-name">New album name</label>
-          <input id="publish-new-name" type="text" maxlength="80" placeholder="Fantasyland, Population 1" />
-          <p class="hint" id="publish-new-slug-preview" style="margin-top:4px;">URL: jamplays.netlify.app/—/</p>
+          <input id="publish-new-name" type="text" maxlength="80" />
+          <p class="note jl-num" id="publish-new-slug-preview">URL: jamplays.netlify.app/—/</p>
         </div>
         <div class="grid-2">
           <div class="field">
             <label for="publish-new-year">Year</label>
-            <input id="publish-new-year" type="number" min="2020" max="2099" />
+            <input id="publish-new-year" type="number" min="2020" max="2099" inputmode="numeric" />
           </div>
           <div class="field">
-            <label for="publish-new-desc">Description <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— used in meta tags</span></label>
-            <input id="publish-new-desc" type="text" maxlength="200" placeholder="A new album by JamSounds." />
+            <label for="publish-new-desc">Description</label>
+            <input id="publish-new-desc" type="text" maxlength="200" />
           </div>
         </div>
       </div>
@@ -374,7 +381,7 @@
           </select>
         </div>
         <div class="field">
-          <label for="publish-position-n">Slot #</label>
+          <label for="publish-position-n">Slot</label>
           <select id="publish-position-n" disabled></select>
         </div>
       </div>
@@ -385,7 +392,7 @@
       </div>
 
       <div class="field">
-        <label for="publish-track-type">Track type suffix <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— optional, appended to title</span></label>
+        <label for="publish-track-type">Title suffix</label>
         <select id="publish-track-type">
           <option value="">None</option>
           <option value="(duet)">(duet)</option>
@@ -396,18 +403,39 @@
       </div>
 
       <div class="field">
-        <label for="publish-lyrics">Lyrics <span class="hint" style="font-weight:400;text-transform:none;letter-spacing:0;">— shown in the player's lyrics panel; strip [Verse]/(Speaker) tags</span></label>
-        <textarea id="publish-lyrics" rows="8" placeholder="Lyrics for the JamPlays player..."></textarea>
+        <label for="publish-lyrics">Lyrics</label>
+        <textarea id="publish-lyrics" rows="8"></textarea>
       </div>
 
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button id="publish-submit" class="btn-primary" style="flex:1;">Publish to JamPlays</button>
-        <button class="btn-secondary" style="margin:0;" data-publish-close>Cancel</button>
+      <div class="jl-actions">
+        <button type="button" class="jl-btn" data-publish-close>Cancel</button>
+        <button type="button" id="publish-submit" class="jl-btn jl-btn-primary">Publish to JamPlays</button>
       </div>
-      <p id="publish-status" class="status-line"></p>
+      <p id="publish-status" class="status-line" role="status"></p>
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <!-- Branded confirm / notice / name prompt (no native alert, confirm or prompt). -->
+  <dialog id="ask" class="jl-dialog" aria-labelledby="ask-title">
+    <form method="dialog" id="ask-form">
+      <div class="jl-dialog-head"><img src="/assets/jam-life/apps/jamsounds.png" alt="" width="32" height="32"><h2 id="ask-title"></h2></div>
+      <div class="jl-dialog-body">
+        <p id="ask-body"></p>
+        <label class="jl-field" id="ask-field" hidden><span id="ask-field-label"></span><input id="ask-input" type="text" maxlength="60" autocomplete="off" /></label>
+      </div>
+      <div class="jl-actions">
+        <button type="button" class="jl-btn" id="ask-no">Cancel</button>
+        <button type="submit" class="jl-btn jl-btn-danger" id="ask-yes"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="look" class="jl-dialog" aria-labelledby="look-title">
+    <div class="jl-dialog-head"><img src="/assets/jam-life/apps/jamsounds.png" alt="" width="32" height="32"><h2 id="look-title">Appearance</h2></div>
+    <jam-appearance hide-label label="Appearance"></jam-appearance>
+    <div class="jl-actions"><button type="button" class="jl-btn" id="look-close">Close</button></div>
+  </dialog>
+
+  <script src="/app.js"></script>
 </body>
 </html>

@@ -200,6 +200,96 @@ const els = {
   publishStatus: document.getElementById('publish-status'),
 };
 
+// ---------- Branded dialogs (in place of alert / confirm / prompt) ----------
+// App icon, a title, Cancel and a named action. Cancel has focus first on a
+// destructive one, Escape cancels, and focus goes back where it came from.
+
+const askEls = {
+  dlg: document.getElementById('ask'),
+  form: document.getElementById('ask-form'),
+  title: document.getElementById('ask-title'),
+  body: document.getElementById('ask-body'),
+  field: document.getElementById('ask-field'),
+  fieldLabel: document.getElementById('ask-field-label'),
+  input: document.getElementById('ask-input'),
+  yes: document.getElementById('ask-yes'),
+  no: document.getElementById('ask-no'),
+};
+
+function openAsk({ title, body = '', action, danger = true, cancel = true, field = null }) {
+  const a = askEls;
+  a.title.textContent = title;
+  a.body.textContent = body;
+  a.field.hidden = !field;
+  if (field) { a.fieldLabel.textContent = field.label; a.input.value = field.value || ''; }
+  a.yes.textContent = action;
+  a.yes.className = `jl-btn ${danger ? 'jl-btn-danger' : 'jl-btn-primary'}`;
+  a.no.hidden = !cancel;
+  const back = document.activeElement;
+  return new Promise((resolve) => {
+    const done = (v) => {
+      a.form.removeEventListener('submit', onSubmit);
+      a.no.removeEventListener('click', onNo);
+      a.dlg.removeEventListener('cancel', onCancel);
+      if (a.dlg.open) a.dlg.close();
+      if (back && back.focus && document.contains(back)) back.focus({ preventScroll: true });
+      resolve(v);
+    };
+    const onSubmit = (e) => { e.preventDefault(); done(field ? a.input.value : true); };
+    const onNo = () => done(field ? null : false);
+    const onCancel = (e) => { e.preventDefault(); done(field ? null : false); };
+    a.form.addEventListener('submit', onSubmit);
+    a.no.addEventListener('click', onNo);
+    a.dlg.addEventListener('cancel', onCancel);
+    a.dlg.showModal();
+    if (field) a.input.focus();
+    else if (cancel && danger) a.no.focus();
+    else a.yes.focus();
+  });
+}
+
+/** Branded confirm: resolves true only for the named action. */
+function ask({ title, body, action, danger = true }) {
+  return openAsk({ title, body, action, danger });
+}
+
+/** Branded notice: one button. */
+function tell({ title, body }) {
+  return openAsk({ title, body, action: 'OK', danger: false, cancel: false });
+}
+
+/** Branded prompt: resolves the text, or null when cancelled. */
+function askText({ title, label, action, value = '' }) {
+  return openAsk({ title, action, danger: false, field: { label, value } });
+}
+
+// ---------- Views (Library / Create / Personas) and Appearance ----------
+
+const VIEWS = ['library', 'create', 'personas'];
+const layoutEl = document.getElementById('layout');
+
+function currentView() {
+  const v = (location.hash.match(/^#\/(\w+)/) || [])[1];
+  return VIEWS.includes(v) ? v : 'library';
+}
+
+function applyView() {
+  const v = currentView();
+  const changed = layoutEl.dataset.view !== v;
+  layoutEl.dataset.view = v;
+  document.querySelectorAll('#views [data-view]').forEach(a => {
+    if (a.dataset.view === v) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+  });
+  if (changed) window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', applyView);
+applyView();
+
+const lookDlg = document.getElementById('look');
+document.getElementById('look-btn').addEventListener('click', () => lookDlg.showModal());
+document.getElementById('look-close').addEventListener('click', () => lookDlg.close());
+
 let jamplaysAlbums = []; // cached from list-jamplays-albums
 let publishContextTrack = null; // the saved-library row currently being published
 
@@ -354,7 +444,7 @@ async function handleProfileChange(e) {
   const picked = e.target.value;
 
   if (picked === '__new__') {
-    const name = prompt('Name this profile (e.g. "Courtney"):');
+    const name = await askText({ title: 'New profile', label: 'Name', action: 'Create profile' });
     if (!name || !name.trim()) {
       // Cancelled — restore previous selection
       e.target.value = getProfile();
@@ -374,7 +464,7 @@ async function handleProfileChange(e) {
       els.profileSelect.value = data.profile.name;
       await reloadProfileScopedData();
     } catch (err) {
-      alert('Could not create profile: ' + err.message);
+      tell({ title: 'Could not create profile', body: err.message });
       e.target.value = getProfile();
     }
     return;
@@ -520,7 +610,7 @@ async function handleReferenceFile(file) {
   }
 
   setStatus(els.refStatus, `Uploading ${file.name}...`, '');
-  els.dropZoneLabel.textContent = 'Uploading...';
+  els.dropZoneLabel.textContent = 'Uploading…';
 
   try {
     const res = await fetch(`${API}/upload-reference`, {
@@ -537,12 +627,12 @@ async function handleReferenceFile(file) {
     els.refPreview.src = data.publicUrl;
     els.refLoaded.classList.remove('hidden');
     els.dropZone.classList.add('loaded');
-    els.dropZoneLabel.textContent = 'Reference loaded — see preview below';
+    els.dropZoneLabel.textContent = 'Reference loaded';
     setStatus(els.refStatus, 'Reference uploaded. Suno will mimic its feel when you Generate.', 'success');
     updateGenerateLabel();
   } catch (e) {
     setStatus(els.refStatus, `Error: ${e.message}`, 'error');
-    els.dropZoneLabel.textContent = 'Drag MP3 here or click to choose';
+    els.dropZoneLabel.textContent = 'Choose or drop an MP3';
     referenceUploadUrl = null;
   }
 }
@@ -553,7 +643,7 @@ function clearReference() {
   els.refPreview.src = '';
   els.refLoaded.classList.add('hidden');
   els.dropZone.classList.remove('loaded');
-  els.dropZoneLabel.textContent = 'Drag MP3 here or click to choose';
+  els.dropZoneLabel.textContent = 'Choose or drop an MP3';
   setStatus(els.refStatus, '', '');
   updateGenerateLabel();
 }
@@ -587,11 +677,11 @@ async function handleGenerate() {
   // first — only one task can be tracked at a time, and its taskId is dropped.
   if (generationInFlight()) {
     const running = (pendingGeneration && pendingGeneration.payload && pendingGeneration.payload.title) || 'A track';
-    if (!confirm(
-      `"${running}" is still generating.\n\n` +
-      `Starting a new generation abandons it — those credits are already spent and it can't be recovered.\n\n` +
-      `Start anyway?`
-    )) return;
+    if (!(await ask({
+      title: `"${running}" is still generating`,
+      body: "Starting a new generation abandons it. Those credits are already spent and it can't be recovered.",
+      action: 'Start anyway',
+    }))) return;
   }
 
   els.generateBtn.disabled = true;
@@ -703,8 +793,8 @@ function updatePersonaModeNote() {
   if (!id) { els.personaModeNote.textContent = ''; return; }
   const model = personaModelFor(id);
   els.personaModeNote.textContent = model === 'voice_persona'
-    ? 'Suno Voice — matches vocal identity and timbre.'
-    : 'Style persona — matches style, mood, arrangement and vocal character.';
+    ? 'Suno Voice'
+    : 'Style persona';
 }
 
 // ---------- Duet mode ----------
@@ -1090,13 +1180,14 @@ function switchVersion(idx) {
 
   document.querySelectorAll('.version-btn').forEach((btn, i) => {
     btn.classList.toggle('active', i === idx);
+    btn.setAttribute('aria-pressed', String(i === idx));
   });
 
-  // Show ✓ if this version was already (auto)saved, otherwise ♡.
+  // Show Saved if this version was already (auto)saved, otherwise Save.
   updateSaveButtonForActive();
   // Reset persona button to default for whichever track is now active.
   if (els.savePersonaBtn) {
-    els.savePersonaBtn.textContent = '👤';
+    els.savePersonaBtn.textContent = 'Persona';
     els.savePersonaBtn.disabled = false;
   }
   // Stems and tool status belong to the previous track — clear them.
@@ -1122,7 +1213,7 @@ async function handleSave() {
   if (!track) return;
 
   els.saveBtn.disabled = true;
-  els.saveBtn.textContent = '...';
+  els.saveBtn.textContent = 'Saving…';
 
   // Same rule as autosave: the parameters this track was generated with beat
   // whatever happens to be in the form when the button is pressed.
@@ -1153,7 +1244,7 @@ async function handleSave() {
     if (!res.ok) throw new Error(data.error || 'Save failed');
 
     els.saveBtn.classList.add('saved');
-    els.saveBtn.textContent = '✓';
+    els.saveBtn.textContent = 'Saved';
     if (track.id) autosavedIds.add(track.id);
     // Mark this saved row as the active library track so the rocketship
     // (publish-to-JamPlays) can find it without requiring a re-click from
@@ -1164,8 +1255,8 @@ async function handleSave() {
     }
     await refreshLibrary();
   } catch (e) {
-    alert(`Save error: ${e.message}`);
-    els.saveBtn.textContent = '♡';
+    tell({ title: 'Save failed', body: e.message });
+    els.saveBtn.textContent = 'Save';
   } finally {
     els.saveBtn.disabled = false;
   }
@@ -1249,7 +1340,7 @@ async function autosaveAll(tracks, taskId) {
     // Keep the pending record so a reload can retry the ones that failed.
     setStatus(
       els.generateStatus,
-      `Saved ${okCount}/${tracks.length}. ${failures.length} failed — reload to retry, or use the ♡ button.`,
+      `Saved ${okCount}/${tracks.length}. ${failures.length} failed — reload to retry, or use Save.`,
       'error'
     );
   }
@@ -1262,7 +1353,7 @@ function updateSaveButtonForActive() {
   if (!track) return;
   if (autosavedIds.has(track.id)) {
     els.saveBtn.classList.add('saved');
-    els.saveBtn.textContent = '✓';
+    els.saveBtn.textContent = 'Saved';
     els.saveBtn.disabled = true;
     els.saveBtn.title = 'Already in library';
     // Keep the rocketship wired to this version's library row so publishing
@@ -1274,7 +1365,7 @@ function updateSaveButtonForActive() {
     }
   } else {
     els.saveBtn.classList.remove('saved');
-    els.saveBtn.textContent = '♡';
+    els.saveBtn.textContent = 'Save';
     els.saveBtn.disabled = false;
     els.saveBtn.title = 'Save to library';
   }
@@ -1290,7 +1381,7 @@ async function refreshLibrary() {
     renderLibrary();
     renderTopPlayed();
     els.tracksPill.textContent = `${savedTracks.length} saved`;
-    els.libraryCount.textContent = `${savedTracks.length} saved`;
+    els.libraryCount.textContent = String(savedTracks.length);
   } catch (e) {
     console.error('library', e);
   }
@@ -1298,7 +1389,7 @@ async function refreshLibrary() {
 
 function renderLibrary() {
   if (!savedTracks.length) {
-    els.libraryList.innerHTML = '<p class="empty-hint">No saved tracks yet.</p>';
+    els.libraryList.innerHTML = '<p class="empty-hint">No saved tracks yet</p>';
     return;
   }
 
@@ -1309,48 +1400,55 @@ function renderLibrary() {
       : '';
     const plays = t.play_count || 0;
     const playBadge = plays > 0
-      ? `<span class="play-count-badge${plays >= 5 ? ' hot' : ''}" title="${plays} play${plays === 1 ? '' : 's'}">▶ ${plays}</span>`
+      ? `<span class="play-count-badge${plays >= 5 ? ' hot' : ''}">${plays} play${plays === 1 ? '' : 's'}</span>`
       : '';
+    const title = t.title || 'Untitled';
     const dlUrl = t.storage_audio_url || t.suno_audio_url || '';
     const dlName = `${(t.title || 'untitled').replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 60)}.mp3`;
     const downloadBtn = dlUrl
-      ? `<button class="library-item-download" data-url="${escapeAttr(dlUrl)}" data-name="${escapeAttr(dlName)}" title="Download MP3">↓</button>`
+      ? `<button type="button" class="library-item-download" data-url="${escapeAttr(dlUrl)}" data-name="${escapeAttr(dlName)}" aria-label="Download ${escapeAttr(title)}">↓</button>`
       : '';
+    const meta = [formatDate(t.created_at), t.style || ''].filter(Boolean).join(' · ');
     return `
-    <div class="library-item" data-id="${t.id}">
+    <div class="library-item" data-id="${t.id}"${t.id === activeLibraryTrackId ? ' aria-current="true"' : ''}>
+      <button type="button" class="lib-play" aria-label="Play ${escapeAttr(title)}">▶\uFE0E</button>
       <div class="library-item-info">
-        <p class="library-item-title">${escapeHtml(t.title || 'Untitled')} ${duetBadge}</p>
-        <p class="library-item-meta">${escapeHtml(t.style || '')} · ${formatDuration(t.duration)}</p>
+        <p class="library-item-title">${escapeHtml(title)} ${duetBadge}</p>
+        <p class="library-item-meta">${escapeHtml(meta)}</p>
+        <p class="library-item-plays jl-num">${escapeHtml([t.duration ? formatDuration(t.duration) : '', plays > 0 ? `${plays} play${plays === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · '))}</p>
       </div>
       ${playBadge}
-      <span class="library-item-date">${formatDate(t.created_at)}</span>
+      <span class="library-item-dur">${t.duration ? formatDuration(t.duration) : ''}</span>
       ${downloadBtn}
-      <button class="library-item-delete" data-id="${t.id}" title="Delete">×</button>
+      <button type="button" class="library-item-delete" data-id="${t.id}" aria-label="Delete ${escapeAttr(title)}">×</button>
     </div>
   `;
   }).join('');
 
   els.libraryList.querySelectorAll('.library-item').forEach(item => {
-    item.addEventListener('click', (e) => {
-      if (e.target.classList.contains('library-item-delete')) return;
-      if (e.target.classList.contains('library-item-download')) return;
+    item.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (btn && !btn.classList.contains('lib-play')) return;
       const id = item.dataset.id;
       const t = savedTracks.find(x => x.id === id);
       if (!t) return;
-      playSavedTrack(t);
+      const opened = await playSavedTrack(t);
+      // The row's play button plays; a click elsewhere on the row only opens it.
+      if (opened && btn) els.audioEl.play().catch(() => {});
     });
   });
 
   els.libraryList.querySelectorAll('.library-item-delete').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (!confirm('Delete this track?')) return;
+      const t = savedTracks.find(x => x.id === btn.dataset.id);
+      if (!(await ask({ title: `Delete "${(t && t.title) || 'this track'}"?`, action: 'Delete track' }))) return;
       const id = btn.dataset.id;
       try {
         await fetch(`${API}/list-tracks?id=${id}`, { method: 'DELETE' });
         await refreshLibrary();
       } catch (e) {
-        alert(`Delete error: ${e.message}`);
+        tell({ title: 'Delete failed', body: e.message });
       }
     });
   });
@@ -1370,7 +1468,7 @@ function renderLibrary() {
         setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1200);
       } catch (err) {
         console.error('download failed', err);
-        alert(`Download failed: ${err.message}`);
+        tell({ title: 'Download failed', body: err.message });
         btn.textContent = original;
         btn.disabled = false;
       }
@@ -1387,7 +1485,7 @@ function renderTopPlayed() {
     : '—';
 
   if (!played.length) {
-    els.topPlayedList.innerHTML = '<p class="empty-hint">No plays yet. Press play on a library track to start counting.</p>';
+    els.topPlayedList.innerHTML = '<p class="empty-hint">No plays yet</p>';
     return;
   }
 
@@ -1401,18 +1499,16 @@ function renderTopPlayed() {
       ? `last ${formatDate(t.last_played_at)}`
       : '';
     return `
-    <div class="library-item" data-id="${t.id}">
-      <div class="library-item-info">
-        <p class="library-item-title">${i + 1}. ${escapeHtml(t.title || 'Untitled')}</p>
-        <p class="library-item-meta">${escapeHtml(t.style || '')} · ${plays} play${plays === 1 ? '' : 's'}${lastPlayed ? ' · ' + lastPlayed : ''}</p>
-        <div class="top-played-bar"><span style="width:${pct}%;"></span></div>
-      </div>
-    </div>
+    <button type="button" class="top-item" data-id="${t.id}">
+      <span class="top-title">${escapeHtml(t.title || 'Untitled')}</span>
+      <span class="top-meta jl-num">${plays} play${plays === 1 ? '' : 's'}${lastPlayed ? ' · ' + lastPlayed : ''}</span>
+      <span class="top-played-bar" aria-hidden="true"><span style="width:${pct}%;"></span></span>
+    </button>
   `;
   }).join('');
 
   // Click a top-played row → load that track into the player (same as library).
-  els.topPlayedList.querySelectorAll('.library-item').forEach(item => {
+  els.topPlayedList.querySelectorAll('.top-item').forEach(item => {
     item.addEventListener('click', () => {
       const id = item.dataset.id;
       const t = savedTracks.find(x => x.id === id);
@@ -1439,19 +1535,20 @@ async function downloadFromUrl(url, filename) {
   setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
-function playSavedTrack(t) {
+async function playSavedTrack(t) {
   // Opening a saved track replaces the form and the player. That is no longer
   // destructive to an in-flight generation (it keeps polling and autosaving on
   // its own taskId), but it does hide the progress — so say so first.
   if (generationInFlight()) {
     const name = (pendingGeneration && pendingGeneration.payload && pendingGeneration.payload.title) || 'A track';
-    const ok = confirm(
-      `"${name}" is still generating.\n\n` +
-      `Opening "${t.title || 'this track'}" will replace the form and player. ` +
-      `The generation keeps running in the background and will still be saved to your library — ` +
-      `you just won't see its progress.\n\nOpen anyway?`
-    );
-    if (!ok) return;
+    const ok = await ask({
+      title: `"${name}" is still generating`,
+      body: `Opening "${t.title || 'this track'}" replaces the form and player. ` +
+        `The generation keeps running and is still saved to your library; its progress is hidden.`,
+      action: 'Open anyway',
+      danger: false,
+    });
+    if (!ok) return false;
   }
 
   currentResults = [{
@@ -1475,12 +1572,22 @@ function playSavedTrack(t) {
   switchVersion(0);
   // hide v2 since saved tracks are single
   document.querySelectorAll('.version-btn')[1].style.display = 'none';
-  document.querySelectorAll('.version-btn')[0].textContent = 'saved';
+  document.querySelectorAll('.version-btn')[0].textContent = 'Saved';
+  markActiveRow();
 
   // Repopulate the brief fields so the user can tweak and re-generate from the
   // same starting point. Prefer the saved music_brief snapshot; fall back to
   // the row's direct columns for tracks saved before music_brief existed.
   repopulateFormFromTrack(t);
+  return true;
+}
+
+/** Marks the library row that is in the player. */
+function markActiveRow() {
+  els.libraryList.querySelectorAll('.library-item').forEach(row => {
+    if (row.dataset.id === activeLibraryTrackId) row.setAttribute('aria-current', 'true');
+    else row.removeAttribute('aria-current');
+  });
 }
 
 function repopulateFormFromTrack(t) {
@@ -1606,32 +1713,36 @@ function renderPersonaSelect() {
 
 function renderPersonas() {
   if (!els.personasList) return;
-  els.personasCount.textContent = `${savedPersonas.length} saved`;
+  els.personasCount.textContent = String(savedPersonas.length);
   if (!savedPersonas.length) {
-    els.personasList.innerHTML = '<p class="empty-hint">No personas yet.</p>';
+    els.personasList.innerHTML = '<p class="empty-hint">No personas yet</p>';
     return;
   }
   els.personasList.innerHTML = savedPersonas.map(p => `
     <div class="library-item" data-id="${escapeAttr(p.id)}">
       <div class="library-item-info">
-        <p class="library-item-title">${escapeHtml(p.name)}${p.persona_model === 'voice_persona' ? ' <span class="hint">voice</span>' : ''}</p>
-        <p class="library-item-meta">${escapeHtml((p.description || '').slice(0, 80))}</p>
+        <p class="library-item-title">${escapeHtml(p.name)}${p.persona_model === 'voice_persona' ? ' <span class="voice-tag">VOICE</span>' : ''}</p>
+        <p class="library-item-meta">${escapeHtml([formatDate(p.created_at), (p.description || '').slice(0, 80)].filter(Boolean).join(' · '))}</p>
       </div>
-      <span class="library-item-date">${formatDate(p.created_at)}</span>
-      <button class="library-item-delete" data-id="${escapeAttr(p.id)}" title="Delete">×</button>
+      <button type="button" class="library-item-delete" data-id="${escapeAttr(p.id)}" aria-label="Delete ${escapeAttr(p.name)}">×</button>
     </div>
   `).join('');
 
   els.personasList.querySelectorAll('.library-item-delete').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (!confirm('Delete this persona? Songs already generated with it are unaffected.')) return;
+      const p = savedPersonas.find(x => x.id === btn.dataset.id);
+      if (!(await ask({
+        title: `Delete ${p ? `"${p.name}"` : 'this persona'}?`,
+        body: 'Songs already generated with it are unaffected.',
+        action: 'Delete persona',
+      }))) return;
       const id = btn.dataset.id;
       try {
         await fetch(`${API}/list-personas?id=${id}`, { method: 'DELETE' });
         await refreshPersonas();
       } catch (e) {
-        alert(`Delete error: ${e.message}`);
+        tell({ title: 'Delete failed', body: e.message });
       }
     });
   });
@@ -1655,7 +1766,7 @@ function openPersonaForm() {
   if (!currentResults) return;
   const track = currentResults[activeVersion];
   if (!track || !track.id || !currentTaskId) {
-    alert('No active track to make a persona from. Generate or open a saved track first.');
+    tell({ title: 'No track in the player', body: 'Generate or open a saved track first.' });
     return;
   }
   // Pre-fill defaults using current track context.
@@ -1739,7 +1850,7 @@ async function handleSavePersona() {
       els.personaSelect.value = data.persona.persona_id;
     }
     setStatus(els.generateStatus, `Persona "${name}" saved. Selected for next generation.`, 'success');
-    els.savePersonaBtn.textContent = '✓';
+    els.savePersonaBtn.textContent = 'Persona saved';
     // Reset + close the form.
     if (els.personaName) els.personaName.value = '';
     if (els.personaDescription) els.personaDescription.value = '';
@@ -2019,10 +2130,10 @@ async function handleSeparateStems() {
     if (!stems.length) throw new Error('No stems returned');
 
     els.stemsList.innerHTML = stems.map(s => `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <span style="flex:1;font-size:12px;">${escapeHtml(s.name)}</span>
-        <audio controls preload="none" src="${escapeAttr(s.url)}" style="height:28px;"></audio>
-        <a class="icon-btn" href="${escapeAttr(s.url)}" download title="Download">↓</a>
+      <div class="stem-row">
+        <span>${escapeHtml(s.name)}</span>
+        <audio controls preload="none" src="${escapeAttr(s.url)}"></audio>
+        <a class="library-item-download" href="${escapeAttr(s.url)}" download aria-label="Download ${escapeAttr(s.name)}">↓</a>
       </div>
     `).join('');
     els.stemsList.classList.remove('hidden');
@@ -2120,7 +2231,7 @@ async function refreshJamplaysAlbums() {
 function openPublishModalFromPlayer() {
   // Only saved library tracks can be published (need the row id)
   if (!activeLibraryTrackId) {
-    alert('Save this track to your library first, then publish.');
+    tell({ title: 'Save it first', body: 'Only tracks in your library can be published.' });
     return;
   }
   const t = savedTracks.find(x => x.id === activeLibraryTrackId);
@@ -2128,9 +2239,22 @@ function openPublishModalFromPlayer() {
   openPublishModal(t);
 }
 
+// While the publish sheet is open the page behind it is inert, Escape closes
+// it, and focus goes back to whatever opened it.
+let publishOpener = null;
+function publishBehind(on) {
+  for (const el of [document.querySelector('.jl-header'), layoutEl]) if (el) el.toggleAttribute('inert', on);
+}
+
 async function openPublishModal(track) {
   publishContextTrack = track;
+  if (els.publishModal.classList.contains('hidden')) publishOpener = document.activeElement;
   els.publishModal.classList.remove('hidden');
+  publishBehind(true);
+  document.documentElement.style.overflow = 'hidden';
+  const sheetBody = els.publishModal.querySelector('.jl-sheet-body');
+  sheetBody.scrollTop = 0;
+  sheetBody.focus({ preventScroll: true });
   els.publishSource.textContent = `Publishing: "${track.title}" · ${track.style || ''}`;
   els.publishDisplayTitle.value = track.title || '';
   els.publishTrackType.value = guessTrackType(track);
@@ -2152,9 +2276,17 @@ async function openPublishModal(track) {
 }
 
 function closePublishModal() {
+  if (els.publishModal.classList.contains('hidden')) return;
   els.publishModal.classList.add('hidden');
   publishContextTrack = null;
+  publishBehind(false);
+  document.documentElement.style.overflow = '';
+  const back = publishOpener; publishOpener = null;
+  if (back && back.focus && document.contains(back)) back.focus({ preventScroll: true });
 }
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !els.publishModal.classList.contains('hidden') && !askEls.dlg.open) closePublishModal();
+});
 
 function renderAlbumDropdown() {
   const opts = jamplaysAlbums.map(a =>
