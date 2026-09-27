@@ -16,7 +16,9 @@ Tailored AI music for your projects. Describe what you're building, get a custom
 - Backend: Netlify Functions (Node 18+)
 - AI: Suno via sunoapi.org wrapper, Anthropic Claude Haiku for brief translation
 - Storage + DB: Supabase (Cannon Code Connect project, `js_` prefixed tables)
-- Hosting: Netlify
+- Hosting: Netlify, at https://sounds.cannoncodeconnect.com (https://jamsounds.netlify.app still serves)
+- Look: the Jam personal kit (Signal) in `public/assets/jam-life/`, synced from the JamPost repo with
+  `node <jampost>/scripts/sync-life-kit.mjs public`; never edit it here
 
 ## Environment variables (set in Netlify dashboard)
 

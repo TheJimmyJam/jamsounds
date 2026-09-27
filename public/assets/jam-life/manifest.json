@@ -1,0 +1,27 @@
+{
+  "version": "8eae21de3f0ef0a4",
+  "files": [
+    "apps/jamaccounting.png",
+    "apps/jamcompare.png",
+    "apps/jamcut.png",
+    "apps/jamfit.png",
+    "apps/jamhome.png",
+    "apps/jamplan.png",
+    "apps/jamplays.png",
+    "apps/jampost.png",
+    "apps/jamsounds.png",
+    "apps/jamtravel.png",
+    "apps/june.png",
+    "base.css",
+    "components.css",
+    "fonts/OFL.txt",
+    "fonts/barlow-latin-400-normal.woff2",
+    "fonts/barlow-latin-500-normal.woff2",
+    "fonts/barlow-latin-600-normal.woff2",
+    "fonts/barlow-latin-700-normal.woff2",
+    "prefs.js",
+    "switcher.js",
+    "theme-init.js",
+    "tokens.css"
+  ]
+}

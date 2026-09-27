@@ -5,7 +5,8 @@
   "description": "Tailored music for your projects, powered by Suno + Claude.",
   "scripts": {
     "dev": "netlify dev",
-    "build": "echo 'static site, no build step'"
+    "build": "echo 'static site, no build step'",
+    "test": "node --test tests/*.test.mjs"
   },
   "engines": {
     "node": ">=18"
