@@ -67,9 +67,9 @@
     sheet.addEventListener('click', (e) => { if (e.target === sheet) close(); });
     sheet.querySelector('[data-send]').addEventListener('click', async () => {
       msg.textContent = 'Sending…';
+      input.focus();
       const { ok, data } = await auth({ action: 'request' });
       msg.textContent = ok ? 'Sent.' : (data.error || 'Could not send.');
-      input.focus();
     });
     sheet.querySelector('form').addEventListener('submit', async (e) => {
       e.preventDefault();
