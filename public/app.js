@@ -216,7 +216,26 @@ const askEls = {
   no: document.getElementById('ask-no'),
 };
 
-function openAsk({ title, body = '', action, danger = true, cancel = true, field = null }) {
+// One <dialog> serves every request, so requests queue (first in, first out):
+// a notice that fires while a confirm is open waits until the confirm is
+// answered, and each request resolves only its own promise. Listeners are
+// added per request and removed when it settles; a settled request ignores
+// any late event.
+const askQueue = [];
+let askActive = null;
+
+function openAsk(opts) {
+  return new Promise((resolve) => {
+    askQueue.push({ opts, resolve });
+    pumpAsk();
+  });
+}
+
+function pumpAsk() {
+  if (askActive || !askQueue.length) return;
+  const req = askQueue.shift();
+  askActive = req;
+  const { title, body = '', action, danger = true, cancel = true, field = null } = req.opts;
   const a = askEls;
   a.title.textContent = title;
   a.body.textContent = body;
@@ -226,26 +245,29 @@ function openAsk({ title, body = '', action, danger = true, cancel = true, field
   a.yes.className = `jl-btn ${danger ? 'jl-btn-danger' : 'jl-btn-primary'}`;
   a.no.hidden = !cancel;
   const back = document.activeElement;
-  return new Promise((resolve) => {
-    const done = (v) => {
-      a.form.removeEventListener('submit', onSubmit);
-      a.no.removeEventListener('click', onNo);
-      a.dlg.removeEventListener('cancel', onCancel);
-      if (a.dlg.open) a.dlg.close();
-      if (back && back.focus && document.contains(back)) back.focus({ preventScroll: true });
-      resolve(v);
-    };
-    const onSubmit = (e) => { e.preventDefault(); done(field ? a.input.value : true); };
-    const onNo = () => done(field ? null : false);
-    const onCancel = (e) => { e.preventDefault(); done(field ? null : false); };
-    a.form.addEventListener('submit', onSubmit);
-    a.no.addEventListener('click', onNo);
-    a.dlg.addEventListener('cancel', onCancel);
-    a.dlg.showModal();
-    if (field) a.input.focus();
-    else if (cancel && danger) a.no.focus();
-    else a.yes.focus();
-  });
+  let settled = false;
+  const done = (v) => {
+    if (settled || askActive !== req) return;
+    settled = true;
+    a.form.removeEventListener('submit', onSubmit);
+    a.no.removeEventListener('click', onNo);
+    a.dlg.removeEventListener('cancel', onCancel);
+    if (a.dlg.open) a.dlg.close();
+    askActive = null;
+    if (back && back.focus && document.contains(back)) back.focus({ preventScroll: true });
+    req.resolve(v);
+    pumpAsk();
+  };
+  const onSubmit = (e) => { e.preventDefault(); done(field ? a.input.value : true); };
+  const onNo = () => done(field ? null : false);
+  const onCancel = (e) => { e.preventDefault(); done(field ? null : false); };
+  a.form.addEventListener('submit', onSubmit);
+  a.no.addEventListener('click', onNo);
+  a.dlg.addEventListener('cancel', onCancel);
+  a.dlg.showModal();
+  if (field) a.input.focus();
+  else if (cancel && danger) a.no.focus();
+  else a.yes.focus();
 }
 
 /** Branded confirm: resolves true only for the named action. */

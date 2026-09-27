@@ -25,10 +25,11 @@ code {
   padding: var(--jl-space-6) var(--jl-gutter) calc(var(--jl-safe-bottom) + var(--jl-space-7));
 }
 .rail { display: contents; }
+/* Phone and tablet order: profile, player, Top played, then the view. */
 .rail-head { order: 0; }
 .now { order: 1; }
-.list, .personas, .create { order: 2; }
-.rail-top { order: 3; }
+.rail-top { order: 2; }
+.list, .personas, .create { order: 3; }
 
 .layout:not([data-view="library"]) :is(.rail-head, .rail-top, .list) { display: none; }
 .layout:not([data-view="personas"]) .personas { display: none; }
