@@ -2336,7 +2336,9 @@ function renderAlbumDropdown() {
   const opts = jamplaysAlbums.map(a =>
     `<option value="${escapeAttr(a.slug)}">${escapeHtml(a.name)} (${a.trackCount} song${a.trackCount === 1 ? '' : 's'})</option>`
   ).join('');
-  els.publishAlbum.innerHTML = opts + '<option value="__new__">+ Create new album…</option>';
+  // New JamPlays albums are built in the JamPlays repo (gate, catalog, page);
+  // publish-to-jamplays refuses them, so they are not offered here.
+  els.publishAlbum.innerHTML = opts || '<option value="" disabled selected>No JamPlays albums found</option>';
 }
 
 function onPublishAlbumChange() {
@@ -2467,7 +2469,7 @@ async function handlePublishSubmit() {
     if (!res.ok) throw new Error(data.error || 'Publish failed');
     setStatus(
       els.publishStatus,
-      `Published! ${data.url} (commit ${data.commit}). Netlify is deploying — refresh JamPlays in a minute.`,
+      `Published "${data.track.title}" as ${data.track.n} of ${data.trackCount}. ${data.url} (commit ${data.commit}) — JamPlays is deploying, refresh it in a minute.`,
       'success'
     );
     // Refresh cached albums so the next publish sees the updated tracklist
