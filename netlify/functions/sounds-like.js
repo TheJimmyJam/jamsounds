@@ -23,7 +23,12 @@ Output ONLY this JSON:
 
 Use your musical knowledge to fill gaps — if you know the reference song, lean on that. If only genre tags are provided, infer typical instrumentation for that genre.`;
 
+const { denyUnlessOwner } = require('../lib/owner');
+
 exports.handler = async (event) => {
+  const denied = denyUnlessOwner(event);
+  if (denied) return denied;
+
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
 
   let body;

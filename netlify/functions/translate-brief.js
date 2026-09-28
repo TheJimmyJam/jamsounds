@@ -84,7 +84,12 @@ DECIDE instrumental BASED ON THE BRIEF:
 
 Output nothing except the JSON object. No prose, no backticks, no preamble.`;
 
+const { denyUnlessOwner } = require('../lib/owner');
+
 exports.handler = async (event) => {
+  const denied = denyUnlessOwner(event);
+  if (denied) return denied;
+
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
 
   let body;

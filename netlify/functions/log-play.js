@@ -8,7 +8,12 @@
 // Track id is globally unique (uuid), so we no longer need to filter by user_email
 // or profile here — the id alone identifies the row.
 
+const { denyUnlessOwner } = require('../lib/owner');
+
 exports.handler = async (event) => {
+  const denied = denyUnlessOwner(event);
+  if (denied) return denied;
+
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
 
   let body;

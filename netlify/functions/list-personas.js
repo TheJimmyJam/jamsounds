@@ -4,7 +4,15 @@
 
 const DEFAULT_PROFILE = 'jimmy';
 
+const { denyUnlessOwner } = require('../lib/owner');
+
 exports.handler = async (event) => {
+  // Reads stay open; every change is the owner's.
+  if (event.httpMethod !== 'GET') {
+    const denied = denyUnlessOwner(event);
+    if (denied) return denied;
+  }
+
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const baseHeaders = {

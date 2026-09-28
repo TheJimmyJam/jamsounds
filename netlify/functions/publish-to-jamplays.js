@@ -28,7 +28,12 @@
 const NodeID3 = require('node-id3');
 const JP = require('../lib/jamplays');
 
+const { denyUnlessOwner } = require('../lib/owner');
+
 exports.handler = async (event) => {
+  const denied = denyUnlessOwner(event);
+  if (denied) return denied;
+
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
 
   let body;
