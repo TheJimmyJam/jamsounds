@@ -9,11 +9,16 @@
 // borrowed records and replaced "earlier" editions are left off. See
 // netlify/lib/jamplays.js.
 //
-// Words and audio never leave here: titles, numbers and voices only.
+// Words and audio never leave here: titles, numbers and voices only. Even
+// those are owner-only: they come from records JamPlays keeps behind its gate.
 
 const JP = require('../lib/jamplays');
+const { denyUnlessOwner } = require('../lib/owner');
 
-exports.handler = async () => {
+exports.handler = async (event) => {
+  const denied = denyUnlessOwner(event);
+  if (denied) return denied;
+
   const token = process.env.GITHUB_PAT;
   if (!token) return json(500, { error: 'GITHUB_PAT env var not set' });
 
