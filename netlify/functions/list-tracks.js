@@ -1,11 +1,12 @@
 // GET  /.netlify/functions/list-tracks?profile=jimmy   → list saved tracks for that profile
 // DELETE /.netlify/functions/list-tracks?id=…           → delete a saved track (and its storage objects)
-// Uses Supabase REST/Storage APIs directly via fetch — no dependencies.
+// Uses the Supabase REST API directly via fetch; the files themselves live in R2.
 
 const BUCKET = 'jamsounds-audio';
 const DEFAULT_PROFILE = 'jimmy';
 
 const { denyUnlessOwner } = require('../lib/owner');
+const r2 = require('../lib/ccc-r2');
 
 exports.handler = async (event) => {
   // Reads stay open; every change is the owner's.
@@ -47,13 +48,8 @@ exports.handler = async (event) => {
       const sunoAudioId = rows[0]?.suno_audio_id;
 
       if (sunoAudioId) {
-        await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}`, {
-          method: 'DELETE',
-          headers: { ...baseHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prefixes: [`audio/${sunoAudioId}.mp3`, `images/${sunoAudioId}.jpg`],
-          }),
-        }).catch(() => {});
+        await Promise.all([`audio/${sunoAudioId}.mp3`, `images/${sunoAudioId}.jpg`]
+          .map((p) => r2.del(r2.keyFor(BUCKET, p)).catch(() => {})));
       }
 
       const delRes = await fetch(`${SUPABASE_URL}/rest/v1/js_tracks?id=eq.${encodeURIComponent(id)}`, {

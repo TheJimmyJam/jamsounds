@@ -2,7 +2,8 @@
 // Publishes a JamSounds library track into an existing JamPlays record.
 //
 // JamPlays is gated, so a song is not a file in the album folder any more:
-//   - the audio goes to the PRIVATE Supabase bucket jamplays-private/<slug>/
+//   - the audio goes to jamplays-private/<slug>/ in the PRIVATE R2 bucket
+//     ccc-files (it was a private Supabase bucket until 2026-09-28)
 //     (never the repo — the site publishes the repo root, past every grant)
 //   - the track, its version and its words go into netlify/data/<slug>.json
 //   - the song art goes to <slug>/song-art/ in the repo, like the others
@@ -29,6 +30,7 @@ const NodeID3 = require('node-id3');
 const JP = require('../lib/jamplays');
 
 const { denyUnlessOwner } = require('../lib/owner');
+const r2 = require('../lib/ccc-r2');
 
 exports.handler = async (event) => {
   const denied = denyUnlessOwner(event);
@@ -166,15 +168,10 @@ exports.handler = async (event) => {
       console.warn('id3 embed failed:', e.message);
     }
     const sameKey = plan.replaced && plan.replaced.files.some((f) => f.split('/').pop() === plan.audioKey.split('/').pop());
-    const up = await fetch(
-      `${SUPABASE_URL}/storage/v1/object/${JP.BUCKET}/${plan.audioKey.split('/').map(encodeURIComponent).join('/')}`,
-      {
-        method: 'POST',
-        headers: { ...sbHeaders, 'Content-Type': 'audio/mpeg', 'x-upsert': sameKey ? 'true' : 'false' },
-        body: taggedAudio,
-      }
-    );
-    if (!up.ok) throw new Error(`audio upload failed: ${up.status} ${await up.text()}`);
+    // R2 always overwrites, so the old no-upsert refusal is checked by hand.
+    const audioKey = r2.keyFor(JP.BUCKET, plan.audioKey);
+    if (!sameKey && await r2.head(audioKey)) throw new Error(`audio upload failed: ${audioKey} already exists`);
+    await r2.put(audioKey, taggedAudio, 'audio/mpeg');
 
     // 6. One commit: manifest, song art, catalog count
     const blobs = [];

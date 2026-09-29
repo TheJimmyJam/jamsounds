@@ -1,5 +1,5 @@
 // POST /.netlify/functions/save-track
-// Downloads the Suno MP3 (and cover image), uploads both to Supabase Storage,
+// Downloads the Suno MP3 (and cover image), uploads both to R2 (ccc-files),
 // and inserts a row in js_tracks.
 // NOTE: ID3v2 cover-art embedding was removed — NodeID3.write() was producing
 // corrupted buffers, making saved files unplayable.
@@ -7,8 +7,11 @@
 const BUCKET = 'jamsounds-audio';
 const USER_EMAIL = 'wcannon83@gmail.com'; // billing/account level (account owner)
 const DEFAULT_PROFILE = 'jimmy';
+// Files live in R2; this is the public link that redirects to them (functions/file.js).
+const FILES = 'https://sounds.cannoncodeconnect.com/files/';
 
 const { denyUnlessOwner } = require('../lib/owner');
+const r2 = require('../lib/ccc-r2');
 
 exports.handler = async (event) => {
   const denied = denyUnlessOwner(event);
@@ -68,24 +71,15 @@ exports.handler = async (event) => {
       }
     }
 
-    // 3. Upload audio to Supabase Storage
-    const audioPath = `audio/${suno_audio_id}.mp3`;
-    const upRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${audioPath}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${SERVICE_KEY}`,
-        apikey: SERVICE_KEY,
-        'Content-Type': 'audio/mpeg',
-        'x-upsert': 'true',
-      },
-      body: audioBuffer,
-    });
-    if (!upRes.ok) {
-      const t = await upRes.text();
-      throw new Error(`Audio upload failed: ${upRes.status} ${t}`);
+    // 3. Upload audio to R2
+    const audioKey = r2.keyFor(BUCKET, `audio/${suno_audio_id}.mp3`);
+    try {
+      await r2.put(audioKey, audioBuffer, 'audio/mpeg');
+    } catch (e) {
+      throw new Error(`Audio upload failed: ${e.message}`);
     }
 
-    const storage_audio_url = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${audioPath}`;
+    const storage_audio_url = FILES + audioKey;
 
     // 5. (Best-effort) upload the cover image separately too, so the UI can
     //    render it without parsing ID3 tags.
@@ -93,20 +87,9 @@ exports.handler = async (event) => {
     if (imgBuffer) {
       try {
         const ext = imgMime === 'image/png' ? 'png' : (imgMime === 'image/webp' ? 'webp' : 'jpg');
-        const imgPath = `images/${suno_audio_id}.${ext}`;
-        const imgUp = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${imgPath}`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${SERVICE_KEY}`,
-            apikey: SERVICE_KEY,
-            'Content-Type': imgMime,
-            'x-upsert': 'true',
-          },
-          body: imgBuffer,
-        });
-        if (imgUp.ok) {
-          storage_image_url = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${imgPath}`;
-        }
+        const imgKey = r2.keyFor(BUCKET, `images/${suno_audio_id}.${ext}`);
+        await r2.put(imgKey, imgBuffer, imgMime);
+        storage_image_url = FILES + imgKey;
       } catch (e) {
         console.warn('image upload skipped:', e.message);
       }
