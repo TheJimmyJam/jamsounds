@@ -7,6 +7,12 @@
   # Suno generation can take a couple minutes — extend function timeout.
   # (Netlify Pro+ supports >10s; on free tier the default 10s is fine for our short polling calls)
 
+# jamsounds-audio files live in R2; old public links answer with a signed 302.
+[[redirects]]
+  from = "/files/*"
+  to = "/.netlify/functions/file/:splat"
+  status = 200
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"

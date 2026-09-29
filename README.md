@@ -31,7 +31,7 @@ Tailored AI music for your projects. Describe what you're building, get a custom
 
 ## Database
 
-Table `public.js_tracks` (created in the Cannon Code Connect Supabase project). RLS enabled — only service-role can read/write. Storage bucket `jamsounds-audio` (public, audio/image MIME types only).
+Table `public.js_tracks` (created in the Cannon Code Connect Supabase project). RLS enabled — only service-role can read/write. Files live in the private Cloudflare R2 bucket `ccc-files` under `jamsounds-audio/` (moved off Supabase Storage 2026-09-28). Old public links are served by `/files/jamsounds-audio/<path>`, which 302s to a signed R2 URL.
 
 ## Functions
 
@@ -39,7 +39,7 @@ Table `public.js_tracks` (created in the Cannon Code Connect Supabase project). 
 - `POST /api/translate-brief` — Claude Haiku turns a project description into Suno parameters
 - `POST /api/generate-music` — kicks off a Suno generation task
 - `GET /api/check-status?taskId=…` — polls a Suno task
-- `POST /api/save-track` — downloads MP3 from Suno, uploads to Supabase Storage, inserts row
+- `POST /api/save-track` — downloads MP3 from Suno, uploads to R2, inserts row
 - `GET /api/list-tracks` — returns saved library
 - `DELETE /api/list-tracks?id=…` — deletes a saved track
 - `POST /api/extend-music` — continues an existing track (polls via `check-status`)

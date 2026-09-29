@@ -6,8 +6,11 @@
 // For longer/larger MP3s, the user should trim the file to a 30-60s clip — that's plenty for a reference.
 
 const BUCKET = 'jamsounds-audio';
+// Files live in R2; this is the public link that redirects to them (functions/file.js).
+const FILES = 'https://sounds.cannoncodeconnect.com/files/';
 
 const { denyUnlessOwner } = require('../lib/owner');
+const r2 = require('../lib/ccc-r2');
 
 exports.handler = async (event) => {
   const denied = denyUnlessOwner(event);
@@ -15,9 +18,7 @@ exports.handler = async (event) => {
 
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' });
 
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!SUPABASE_URL || !SERVICE_KEY) return json(500, { error: 'Supabase env not set' });
+  if (!r2.configured()) return json(500, { error: 'R2 env not set' });
 
   const contentType = (event.headers['content-type'] || event.headers['Content-Type'] || '').toLowerCase();
   if (!contentType.includes('audio/')) {
@@ -39,23 +40,14 @@ exports.handler = async (event) => {
     const rand = Math.random().toString(36).slice(2, 8);
     const fileName = `references/${ts}-${rand}.mp3`;
 
-    const upRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${fileName}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${SERVICE_KEY}`,
-        apikey: SERVICE_KEY,
-        'Content-Type': 'audio/mpeg',
-        'x-upsert': 'false',
-      },
-      body: buf,
-    });
-
-    if (!upRes.ok) {
-      const t = await upRes.text();
-      return json(500, { error: `Upload failed: ${upRes.status} ${t}` });
+    const key = r2.keyFor(BUCKET, fileName);
+    try {
+      await r2.put(key, buf, 'audio/mpeg');
+    } catch (e) {
+      return json(500, { error: `Upload failed: ${e.message}` });
     }
 
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${fileName}`;
+    const publicUrl = FILES + key;
     return json(200, { publicUrl, fileName, sizeBytes });
   } catch (e) {
     return json(500, { error: e.message });

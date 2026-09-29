@@ -9,7 +9,7 @@
 //   netlify/data/<slug>.json      the manifest: tracks, versions, lyrics
 //   assets/catalog.js             the public card: title, edition, "N songs"
 //   <slug>/song-art/*.png         per-song art (public, in the repo)
-//   jamplays-private/<slug>/*.mp3 the audio, in a PRIVATE Supabase bucket
+//   jamplays-private/<slug>/*.mp3 the audio, in the PRIVATE R2 bucket ccc-files
 //
 // The audio must never be committed: the site publishes the repo root, so a
 // committed mp3 is on the open web, past every grant.
