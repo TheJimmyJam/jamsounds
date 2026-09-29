@@ -16,6 +16,7 @@
 const DURATION_MODELS = ['V6', 'V6_WILD', 'V6_MINI', 'V5_5'];
 
 const { denyUnlessOwner } = require('../lib/owner');
+const { sunoUrl } = require('../lib/suno-url');
 
 exports.handler = async (event) => {
   const denied = denyUnlessOwner(event);
@@ -74,7 +75,7 @@ exports.handler = async (event) => {
   // model is the only gate — but check it server-side too, since an older saved
   // brief could carry a duration forward onto a V4 regeneration.
   if (duration != null && DURATION_MODELS.includes(model)) sunoPayload.duration = Math.round(duration);
-  if (isCover) sunoPayload.uploadUrl = uploadUrl;
+  if (isCover) sunoPayload.uploadUrl = sunoUrl(uploadUrl);
   if (personaId) {
     sunoPayload.personaId = personaId;
     sunoPayload.personaModel = personaModel || 'style_persona';
