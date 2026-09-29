@@ -13,6 +13,7 @@ const NO_OP_CALLBACK = 'https://example.com/no-op';
 const VALID_TYPES = ['separate_vocal', 'split_stem', 'split_stem_advanced'];
 
 const { denyUnlessOwner } = require('../lib/owner');
+const { sunoUrl } = require('../lib/suno-url');
 
 exports.handler = async (event) => {
   const denied = denyUnlessOwner(event);
@@ -46,7 +47,7 @@ exports.handler = async (event) => {
     payload.taskId = taskId;
     payload.audioId = audioId;
   } else {
-    payload.audioUrl = audioUrl;
+    payload.audioUrl = sunoUrl(audioUrl);
   }
   if (type === 'split_stem_advanced') payload.stemName = stemName;
 

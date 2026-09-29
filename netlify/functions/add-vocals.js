@@ -13,6 +13,7 @@ const SUNO_BASE = 'https://api.sunoapi.org/api/v1';
 const NO_OP_CALLBACK = 'https://example.com/no-op';
 
 const { denyUnlessOwner } = require('../lib/owner');
+const { sunoUrl } = require('../lib/suno-url');
 
 exports.handler = async (event) => {
   const denied = denyUnlessOwner(event);
@@ -45,7 +46,7 @@ exports.handler = async (event) => {
   const avoid = negativeTags || 'none';
 
   const payload = {
-    uploadUrl,
+    uploadUrl: sunoUrl(uploadUrl),
     prompt,
     title,
     style,
