@@ -13,7 +13,9 @@ const crypto = require('crypto');
 const O = require('../lib/owner');
 
 const RESEND_KEY = process.env.JAMSOUNDS_RESEND_KEY || '';
-const MAIL_FROM = process.env.JAMSOUNDS_MAIL_FROM || 'Jimmy Cannon <jimmy@cannoncodeconnect.com>';
+// Sign-in codes go out as CannonCodeConnect (Jimmy, 2026-09-29), whatever
+// the *_MAIL_FROM env says: CODE_FROM in lib/ccc-code-mail.js.
+const { CODE_FROM, codeMail, codeSubject } = require('../lib/ccc-code-mail.js');
 const SECRET = process.env.JAMSOUNDS_SESSION_SECRET || '';
 const LOGIN_MINUTES = 15;
 const MAX_ATTEMPTS = 5;
@@ -51,7 +53,7 @@ exports.handler = async (event) => {
           requested_ip: (event.headers || {})['x-nf-client-connection-ip'] || null,
         }),
       });
-      await send(`${code} is your JamSounds code`, mail(`${siteUrl(event)}/?login=${encodeURIComponent(token)}`, code));
+      await send(codeSubject(code), mail(`${siteUrl(event)}/?login=${encodeURIComponent(token)}`, code));
       return json(200, { ok: true });
     }
 
@@ -94,13 +96,9 @@ exports.handler = async (event) => {
   }
 };
 
+// The code mail is CannonCodeConnect's, the same in every app (lib/ccc-code-mail.js).
 function mail(link, code) {
-  return `<div style="font-family:-apple-system,Segoe UI,Helvetica,sans-serif;color:#1b1d24;max-width:480px;margin:0 auto;padding:26px 24px">
-  <h1 style="font-size:22px;font-weight:600;margin:0 0 14px">JamSounds sign-in</h1>
-  <p style="font-size:34px;letter-spacing:8px;color:#1d6f5e;margin:0 0 22px">${code}</p>
-  <p style="margin:0 0 22px"><a href="${link}" style="background:#1b1d24;color:#f5f4f2;text-decoration:none;padding:12px 26px;font-size:16px;display:inline-block;border-radius:6px">Open JamSounds</a></p>
-  <p style="font-size:12px;color:#8a6f3d;margin:0">Either works once, for ${LOGIN_MINUTES} minutes. If you didn't ask for this, ignore it.</p>
-</div>`;
+  return codeMail({ code, link, app: 'JamSounds', minutes: LOGIN_MINUTES, host: new URL(link).host });
 }
 
 async function send(subject, html) {
@@ -108,7 +106,7 @@ async function send(subject, html) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: MAIL_FROM, to: [O.OWNER_EMAIL], subject, html }),
+    body: JSON.stringify({ from: CODE_FROM, to: [O.OWNER_EMAIL], subject, html }),
   });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || `resend ${res.status}`);
 }
