@@ -17,7 +17,7 @@ const crypto = require("crypto");
 
 const SESSION_SECRET = process.env.JAMSOUNDS_SESSION_SECRET || "";
 const OWNER_KEY = process.env.JAMSOUNDS_OWNER_KEY || "";
-const OWNER_EMAIL = (process.env.JAMSOUNDS_OWNER_EMAIL || "wcannon83@gmail.com").trim().toLowerCase();
+const OWNER_EMAIL = (process.env.JAMSOUNDS_OWNER_EMAIL || "jimmy@cannoncodeconnect.com").trim().toLowerCase();
 
 const COOKIE = "js_owner";
 const SESSION_DAYS = 30;
