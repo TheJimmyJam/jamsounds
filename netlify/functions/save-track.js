@@ -5,7 +5,7 @@
 // corrupted buffers, making saved files unplayable.
 
 const BUCKET = 'jamsounds-audio';
-const USER_EMAIL = 'wcannon83@gmail.com'; // billing/account level (account owner)
+const USER_EMAIL = 'jimmy@cannoncodeconnect.com'; // billing/account level (account owner)
 const DEFAULT_PROFILE = 'jimmy';
 // Files live in R2; this is the public link that redirects to them (functions/file.js).
 const FILES = 'https://sounds.cannoncodeconnect.com/files/';

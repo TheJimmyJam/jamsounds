@@ -15,7 +15,7 @@
 //
 // Returns: { persona: <row> }
 
-const USER_EMAIL = 'wcannon83@gmail.com';
+const USER_EMAIL = 'jimmy@cannoncodeconnect.com';
 const DEFAULT_PROFILE = 'jimmy';
 
 const { denyUnlessOwner } = require('../lib/owner');

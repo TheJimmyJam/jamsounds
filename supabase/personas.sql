@@ -4,7 +4,7 @@
 
 create table if not exists public.js_personas (
   id uuid primary key default gen_random_uuid(),
-  user_email text not null default 'wcannon83@gmail.com',
+  user_email text not null default 'jimmy@cannoncodeconnect.com',
   persona_id text not null,                        -- Suno's persona ID
   name text not null,                              -- e.g. "Megi" / "Jimmy"
   description text,                                -- the description sent to Suno

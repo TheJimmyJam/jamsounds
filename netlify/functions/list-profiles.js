@@ -5,7 +5,7 @@
 // Profile naming rule: lowercase a-z0-9, hyphens. The slug becomes the
 // "profile" partition key on js_personas / js_tracks etc.
 
-const USER_EMAIL = 'wcannon83@gmail.com';
+const USER_EMAIL = 'jimmy@cannoncodeconnect.com';
 
 const { denyUnlessOwner } = require('../lib/owner');
 
