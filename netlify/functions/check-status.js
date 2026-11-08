@@ -2,7 +2,11 @@
 // Polls Suno for task status.
 // Returns: { status: 'pending' | 'streaming' | 'complete' | 'error', tracks?: [], message?: string }
 
+const { denyUnlessOwner } = require('../lib/owner');
+
 exports.handler = async (event) => {
+  const denied = denyUnlessOwner(event);
+  if (denied) return denied;
   const taskId = event.queryStringParameters?.taskId;
   if (!taskId) return json(400, { error: 'taskId required' });
 
@@ -13,7 +17,7 @@ exports.handler = async (event) => {
     const data = await res.json();
 
     if (data.code !== 200) {
-      return json(500, { error: data.msg || 'Suno error', raw: data });
+      return json(500, { error: data.msg || 'Suno error' });
     }
 
     const status = data.data?.status;

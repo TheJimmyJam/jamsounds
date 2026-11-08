@@ -45,7 +45,11 @@ const KINDS = {
   },
 };
 
+const { denyUnlessOwner } = require('../lib/owner');
+
 exports.handler = async (event) => {
+  const denied = denyUnlessOwner(event);
+  if (denied) return denied;
   const kind = event.queryStringParameters?.kind;
   const taskId = event.queryStringParameters?.taskId;
 
@@ -61,7 +65,7 @@ exports.handler = async (event) => {
     const data = await res.json();
 
     if (data.code !== 200) {
-      return json(500, { error: data.msg || 'Suno error', raw: data });
+      return json(500, { error: data.msg || 'Suno error' });
     }
 
     const flag = data.data?.successFlag;
